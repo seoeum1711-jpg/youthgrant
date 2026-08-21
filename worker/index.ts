@@ -1,46 +1,27 @@
-/** Cloudflare Worker entry point for the vinext-starter template. */
-import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { betaCollectors } from "../lib/collectors/run.ts";
+import { CollectionLockedError, runCollectionToD1 } from "../lib/collectors/persist.ts";
+import type { YouthGrantEnv } from "../lib/cloudflare.ts";
+import { isOpsAuthorized, isProtectedOpsPath, opsDeniedResponse } from "../lib/security/ops-auth.ts";
 
-interface Env {
-  ASSETS: Fetcher;
-  DB: D1Database;
-  IMAGES: {
-    input(stream: ReadableStream): {
-      transform(options: Record<string, unknown>): {
-        output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
-      };
-    };
-  };
-}
+type WorkerExecutionContext={waitUntil(promise:Promise<unknown>):void;passThroughOnException():void};
+type ScheduledControllerLike={cron:string;scheduledTime:number;type:string};
 
-interface ExecutionContext {
-  waitUntil(promise: Promise<unknown>): void;
-  passThroughOnException(): void;
-}
-
-// Image security config. SVG sources with .svg extension auto-skip the
-// optimization endpoint on the client side (served directly, no proxy).
-// To route SVGs through the optimizer (with security headers), set
-// dangerouslyAllowSVG: true in next.config.js and uncomment below:
-// const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
-
-const worker = {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-
-    if (url.pathname === "/_vinext/image") {
-      const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
-        fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
-        transformImage: async (body, { width, format, quality }) => {
-          const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
-          return result.response();
-        },
-      }, allowedWidths);
+const worker={
+  async fetch(request:Request,env:YouthGrantEnv,ctx:WorkerExecutionContext):Promise<Response>{
+    const url=new URL(request.url);
+    if(isProtectedOpsPath(url.pathname)&&!await isOpsAuthorized(request,env))return opsDeniedResponse(env);
+    if(url.pathname==="/api/ops/collect"){
+      if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405,headers:{allow:"POST"}});
+      try{const result=await runCollectionToD1(env.DB,betaCollectors(),"MANUAL");return Response.json(result);}
+      catch(error){if(error instanceof CollectionLockedError)return Response.json({error:error.message},{status:423});throw error;}
     }
-
-    return handler.fetch(request, env, ctx);
+    if(url.pathname==="/api/health")return Response.json({service:"YouthGrant",status:"ok",environment:env.ENVIRONMENT??"unknown"});
+    return handler.fetch(request,env,ctx);
+  },
+  async scheduled(_controller:ScheduledControllerLike,env:YouthGrantEnv){
+    try{await runCollectionToD1(env.DB,betaCollectors(),"AUTOMATION");}
+    catch(error){if(error instanceof CollectionLockedError)return;throw error;}
   },
 };
 

@@ -1,0 +1,10 @@
+ALTER TABLE `source_runs` ADD `items_found` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `items_new` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `items_updated` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `items_matched` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `items_analyzed` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `result` text DEFAULT 'RUNNING' NOT NULL;
+ALTER TABLE `source_runs` ADD `http_status` integer;
+ALTER TABLE `source_runs` ADD `parser_version` text DEFAULT 'v3-web-1' NOT NULL;
+ALTER TABLE `source_runs` ADD `error_code` text;
+ALTER TABLE `source_runs` ADD `error_message` text;

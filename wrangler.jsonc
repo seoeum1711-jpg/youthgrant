@@ -1,0 +1,63 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "youthgrant",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-05-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "youthgrant-local",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "development",
+    "SITE_ORIGIN": "http://localhost:3000"
+  },
+  "triggers": {
+    "crons": ["0 */6 * * *"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "preview": {
+      "name": "youthgrant-preview",
+      "vars": {
+        "ENVIRONMENT": "preview",
+        "SITE_ORIGIN": "https://youthgrant-preview.workers.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "youthgrant-preview",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      "triggers": {
+        "crons": []
+      }
+    },
+    "production": {
+      "name": "youthgrant",
+      "vars": {
+        "ENVIRONMENT": "production",
+        "SITE_ORIGIN": "https://youthgrant.workers.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "youthgrant-beta",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      "triggers": {
+        "crons": ["0 */6 * * *"]
+      }
+    }
+  }
+}

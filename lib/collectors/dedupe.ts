@@ -1,5 +1,6 @@
 import type { RawNotice } from "./contracts.ts";
 
 function normalize(value:string){return value.normalize("NFKC").toLowerCase().replace(/https?:\/\/(www\.)?/g,"").replace(/[^\p{L}\p{N}]+/gu," ").trim();}
-export function makeDedupeKey(sourceId:string,title:string,url:string){const canonical=normalize(url.split(/[?#]/)[0]);return `${sourceId}:${canonical||normalize(title)}`;}
+function canonicalUrl(value:string){try{const url=new URL(value);url.hash="";url.pathname=url.pathname.replace(/;jsessionid=[^/?;]*/gi,"");for(const key of [...url.searchParams.keys()])if(/^utm_|session|jsessionid/i.test(key))url.searchParams.delete(key);url.searchParams.sort();return url.toString();}catch{return value.split("#")[0];}}
+export function makeDedupeKey(sourceId:string,title:string,url:string){const canonical=normalize(canonicalUrl(url));return `${sourceId}:${canonical||normalize(title)}`;}
 export function dedupeNotices(notices:RawNotice[]){const seen=new Set<string>();return notices.filter(notice=>{if(seen.has(notice.dedupeKey))return false;seen.add(notice.dedupeKey);return true;});}

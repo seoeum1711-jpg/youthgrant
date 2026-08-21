@@ -1,0 +1,6 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { isOpsAuthorized, isProtectedOpsPath, opsDeniedResponse } from "../lib/security/ops-auth.ts";
+
+test("production Ops fails closed when its secret is missing",async()=>{const request=new Request("https://example.com/ops/review");assert.equal(await isOpsAuthorized(request,{ENVIRONMENT:"production"}),false);assert.equal(opsDeniedResponse({}).status,503);assert.equal(isProtectedOpsPath("/ops/review"),true);assert.equal(isProtectedOpsPath("/grants/one"),false)});
+test("Ops accepts valid Basic or Bearer credentials and rejects invalid ones",async()=>{const env={ENVIRONMENT:"production" as const,OPS_ACCESS_TOKEN:"test-only-token"};const bearer=new Request("https://example.com/ops",{headers:{authorization:"Bearer test-only-token"}});const basic=new Request("https://example.com/ops",{headers:{authorization:`Basic ${btoa("ops:test-only-token")}`}});const invalid=new Request("https://example.com/ops",{headers:{authorization:"Bearer wrong"}});assert.equal(await isOpsAuthorized(bearer,env),true);assert.equal(await isOpsAuthorized(basic,env),true);assert.equal(await isOpsAuthorized(invalid,env),false);assert.equal(opsDeniedResponse(env).status,401)});

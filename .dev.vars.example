@@ -1,0 +1,2 @@
+# Copy to .dev.vars for local Ops authentication testing.
+OPS_ACCESS_TOKEN=replace-with-a-local-only-value

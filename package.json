@@ -1,5 +1,5 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "youthgrant",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -11,10 +11,15 @@
     "start": "vinext start",
     "test": "npm run unit",
     "typecheck": "tsc --noEmit",
-    "unit": "node --experimental-strip-types --test tests/domain.test.ts tests/collectors.test.ts",
+    "unit": "node --experimental-strip-types --test tests/domain.test.ts tests/collectors.test.ts tests/security.test.ts",
     "rendered": "node --test tests/rendered-html.test.mjs",
     "lint": "eslint app lib db worker tests",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:preview": "wrangler d1 migrations apply DB --remote --env preview",
+    "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production",
+    "deploy:preview": "node scripts/cloudflare-deploy.mjs preview",
+    "deploy:production": "node scripts/cloudflare-deploy.mjs production"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
@@ -25,7 +30,6 @@
     "@cloudflare/vite-plugin": "1.37.1",
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.2.6",
-    "@openai/sites-vite-plugin": "0.1.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

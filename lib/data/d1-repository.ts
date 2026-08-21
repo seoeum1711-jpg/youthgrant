@@ -1,0 +1,46 @@
+import { env } from "cloudflare:workers";
+import type { D1DatabaseLike } from "../cloudflare.ts";
+import type { Opportunity, Verification, ReviewStatus } from "../domain/types.ts";
+
+type OpportunityRow={
+  id:string;dedupe_key:string;title:string;organization:string;region:"경기"|"서울"|"전국";field:string|null;facility_types_json:string;
+  application_start:string|null;deadline:string|null;deadline_verification:Verification;deadline_evidence:string|null;deadline_evidence_location:string|null;
+  eligibility_verification:Verification;eligibility_evidence:string|null;eligibility_evidence_location:string|null;amount_won:number|null;amount_text:string|null;
+  self_burden:string|null;support_details:string|null;review_status:ReviewStatus;published_at:string|null;updated_at:string;
+  source_id:string;source_name:string;source_method:"WEB"|"RSS"|"API"|"OPEN_DATA";source_url:string;collected_at:string;
+};
+
+export type ReviewQueueItem={id:string;title:string;sourceId:string;sourceName:string;sourceUrl:string;flag:string;reason:string;raw:string;tone:"warning"|"danger"};
+export type SourceMonitorItem={id:string;name:string;method:string;region:string;health:string;implemented:boolean;lastRunAt:string|null;found:number|null;itemsNew:number|null;itemsUpdated:number|null;matched:number|null;analyzed:number|null;result:string|null;httpStatus:number|null;parserVersion:string|null;error:string|null};
+export type CrawlRunSummary={id:string;status:string;trigger:"MANUAL"|"AUTOMATION";startedAt:string;finishedAt:string|null;errorCount:number};
+
+function db():D1DatabaseLike{if(!env.DB)throw new Error("Cloudflare D1 binding `DB` is unavailable.");return env.DB;}
+function facilities(value:string){try{const parsed=JSON.parse(value);return Array.isArray(parsed)&&parsed.every(item=>typeof item==="string")?parsed:["기타 / 확인 필요"];}catch{return["기타 / 확인 필요"];}}
+function matchRange(evidence:string|null,facilityTypes:string[]){if(!evidence)return null;for(const facility of facilityTypes){if(facility.includes("확인 필요"))continue;const start=evidence.indexOf(facility);if(start>=0)return{start,end:start+facility.length};}return null;}
+function mapOpportunity(row:OpportunityRow):Opportunity{const facilityTypes=facilities(row.facility_types_json);return{id:row.id,dedupeKey:row.dedupe_key,title:row.title,organization:row.organization,sourceId:row.source_id,sourceName:row.source_name,sourceMethod:row.source_method,sourceUrl:row.source_url,region:row.region,facilityTypes,field:row.field,applicationStart:row.application_start,deadline:row.deadline,deadlineVerification:row.deadline_verification,deadlineEvidence:row.deadline_evidence,deadlineEvidenceLocation:row.deadline_evidence_location,eligibilityVerification:row.eligibility_verification,eligibilityEvidence:row.eligibility_evidence,eligibilityEvidenceLocation:row.eligibility_evidence_location,eligibilityMatchRange:matchRange(row.eligibility_evidence,facilityTypes),amountWon:row.amount_won,amountText:row.amount_text,selfBurden:row.self_burden,supportDetails:row.support_details,reviewStatus:row.review_status,collectedAt:row.collected_at};}
+
+const opportunitySelect=`SELECT o.*,s.id AS source_id,s.name AS source_name,s.method AS source_method,rn.url AS source_url,rn.collected_at
+  FROM opportunities o
+  JOIN opportunity_sources os ON os.opportunity_id=o.id AND os.is_primary=1
+  JOIN raw_notices rn ON rn.id=os.raw_notice_id
+  JOIN sources s ON s.id=rn.source_id`;
+
+export async function listPublicOpportunities(){const result=await db().prepare(`${opportunitySelect} WHERE o.review_status<>'PENDING' ORDER BY CASE WHEN o.deadline_verification='VERIFIED' THEN 0 ELSE 1 END,o.deadline ASC,o.updated_at DESC LIMIT 200`).all<OpportunityRow>();return result.results.map(mapOpportunity);}
+export async function getOpportunity(id:string){const row=await db().prepare(`${opportunitySelect} WHERE o.id=? LIMIT 1`).bind(id).first<OpportunityRow>();return row?mapOpportunity(row):null;}
+export async function countManagedSources(){const row=await db().prepare("SELECT COUNT(*) AS count FROM sources").first<{count:number}>();return row?.count??0;}
+
+export async function listReviewQueue():Promise<ReviewQueueItem[]>{
+  const reviewSelect=opportunitySelect.replace("SELECT o.*","SELECT o.*,rn.raw_text");
+  const result=await db().prepare(`${reviewSelect} WHERE o.review_status IN ('PENDING','REVIEW_REQUIRED') ORDER BY o.updated_at DESC LIMIT 100`).all<OpportunityRow&{raw_text:string}>();
+  return result.results.map(row=>{const eligibility=row.eligibility_verification;const needsAttachment=eligibility==="NEEDS_ATTACHMENT";return{id:row.id,title:row.title,sourceId:row.source_id,sourceName:row.source_name,sourceUrl:row.source_url,flag:needsAttachment?"첨부 확인":"검토 필요",reason:needsAttachment?"신청자격이 첨부파일에 있어 자동 확정할 수 없습니다.":"신청자격 또는 신청 마감 근거가 충분하지 않아 운영자 검토가 필요합니다.",raw:row.eligibility_evidence??row.raw_text,tone:needsAttachment?"danger":"warning"};});
+}
+
+export async function listSourceMonitor():Promise<SourceMonitorItem[]>{
+  const result=await db().prepare(`SELECT s.*,
+    sr.started_at AS last_run_at,sr.items_found,sr.items_new,sr.items_updated,sr.items_matched,sr.items_analyzed,sr.result,sr.http_status,sr.parser_version,sr.error_message
+    FROM sources s LEFT JOIN source_runs sr ON sr.id=(SELECT id FROM source_runs latest WHERE latest.source_id=s.id ORDER BY latest.started_at DESC LIMIT 1)
+    ORDER BY s.id`).all<Record<string,unknown>>();
+  return result.results.map(row=>({id:String(row.id),name:String(row.name),method:String(row.method),region:String(row.region),health:String(row.health),implemented:Boolean(row.implemented),lastRunAt:row.last_run_at?String(row.last_run_at):null,found:row.items_found===null||row.items_found===undefined?null:Number(row.items_found),itemsNew:row.items_new===null||row.items_new===undefined?null:Number(row.items_new),itemsUpdated:row.items_updated===null||row.items_updated===undefined?null:Number(row.items_updated),matched:row.items_matched===null||row.items_matched===undefined?null:Number(row.items_matched),analyzed:row.items_analyzed===null||row.items_analyzed===undefined?null:Number(row.items_analyzed),result:row.result?String(row.result):null,httpStatus:row.http_status===null||row.http_status===undefined?null:Number(row.http_status),parserVersion:row.parser_version?String(row.parser_version):null,error:row.error_message?String(row.error_message):null}));
+}
+
+export async function getLatestCrawlRun(trigger?:"MANUAL"|"AUTOMATION"):Promise<CrawlRunSummary|null>{const statement=trigger?db().prepare("SELECT id,status,trigger,started_at,finished_at,error_count FROM crawl_runs WHERE trigger=? ORDER BY started_at DESC LIMIT 1").bind(trigger):db().prepare("SELECT id,status,trigger,started_at,finished_at,error_count FROM crawl_runs ORDER BY started_at DESC LIMIT 1");const row=await statement.first<Record<string,unknown>>();return row?{id:String(row.id),status:String(row.status),trigger:row.trigger as "MANUAL"|"AUTOMATION",startedAt:String(row.started_at),finishedAt:row.finished_at?String(row.finished_at):null,errorCount:Number(row.error_count)}:null;}
