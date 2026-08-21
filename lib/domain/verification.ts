@@ -8,13 +8,14 @@ export function mayVerifyDeadline(context:string):boolean {
 }
 
 export function verifiedDeadline(opportunity:Opportunity):Date|null {
-  if (opportunity.deadlineVerification !== Verification.VERIFIED || !opportunity.deadline) return null;
+  if ((opportunity.deadlineVerification!==Verification.VERIFIED&&opportunity.deadlineVerification!==Verification.MANUAL_CONFIRMED) || !opportunity.deadline) return null;
   const date = new Date(opportunity.deadline);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function eligibilityPresentation(status:Opportunity["eligibilityVerification"]) {
-  if (status === Verification.VERIFIED || status === Verification.FROM_BODY) return { label:"청소년수련시설 신청 가능" as const, tone:"verified" as const };
+  if (status === Verification.VERIFIED || status === Verification.FROM_BODY || status === Verification.MANUAL_CONFIRMED) return { label:"청소년수련시설 신청 가능" as const, tone:"verified" as const };
+  if (status === Verification.MANUAL_REJECTED) return { label:"신청 불가" as const, tone:"ineligible" as const };
   if (status === Verification.REVIEW_REQUIRED) return { label:"검토 필요" as const, tone:"review" as const };
   return { label:"신청자격 확인 필요" as const, tone:"unknown" as const };
 }

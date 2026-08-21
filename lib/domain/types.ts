@@ -4,11 +4,13 @@ export const Verification = {
   NEEDS_ATTACHMENT: "NEEDS_ATTACHMENT",
   NEEDS_ADMIN: "NEEDS_ADMIN",
   REVIEW_REQUIRED: "REVIEW_REQUIRED",
+  MANUAL_CONFIRMED: "MANUAL_CONFIRMED",
+  MANUAL_REJECTED: "MANUAL_REJECTED",
   UNKNOWN: "UNKNOWN",
 } as const;
 export type Verification = (typeof Verification)[keyof typeof Verification];
 
-export const ReviewStatus = { PUBLISHED:"PUBLISHED", PENDING:"PENDING", REVIEW_REQUIRED:"REVIEW_REQUIRED" } as const;
+export const ReviewStatus = { PUBLISHED:"PUBLISHED", PENDING:"PENDING", REVIEW_REQUIRED:"REVIEW_REQUIRED", CONFIRMED:"CONFIRMED", DEFERRED:"DEFERRED", EXCLUDED:"EXCLUDED" } as const;
 export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus];
 
 export type Opportunity = {
@@ -46,8 +48,8 @@ export type GrantViewModel = {
   status:"접수중"|"마감임박"|"예정"|"일정 확인 필요"|"마감";
   statusTone:"open"|"soon"|"plan"|"check"|"closed";
   dDay:string|null; dateLabel:string; applicationPeriod:string;
-  eligibilityLabel:"청소년수련시설 신청 가능"|"신청자격 확인 필요"|"검토 필요";
-  eligibilityTone:"verified"|"unknown"|"review";
+  eligibilityLabel:"청소년수련시설 신청 가능"|"신청 가능"|"신청 불가"|"신청자격 확인 필요"|"검토 필요";
+  eligibilityTone:"verified"|"ineligible"|"unknown"|"review";
   evidenceText:string; evidenceLocation:string; evidenceVerified:boolean; evidenceMatchRange:{start:number;end:number}|null;
   amountLabel:string; selfBurdenLabel:string; supportDetails:string;
   checks:{label:string;state:"verified"|"unknown";message:string}[];

@@ -10,7 +10,8 @@ type OpportunityRow={
   source_id:string;source_name:string;source_method:"WEB"|"RSS"|"API"|"OPEN_DATA";source_url:string;collected_at:string;
 };
 
-export type ReviewQueueItem={id:string;title:string;sourceId:string;sourceName:string;sourceUrl:string;flag:string;reason:string;raw:string;tone:"warning"|"danger"};
+export type ReviewQueueItem={id:string;title:string;sourceId:string;sourceName:string;sourceUrl:string;reviewStatus:ReviewStatus;flag:string;reason:string;raw:string;tone:"warning"|"danger"};
+export type ReviewDetail={opportunity:Opportunity;rawText:string};
 export type SourceMonitorItem={id:string;name:string;method:string;region:string;health:string;implemented:boolean;lastRunAt:string|null;found:number|null;itemsNew:number|null;itemsUpdated:number|null;matched:number|null;analyzed:number|null;result:string|null;httpStatus:number|null;parserVersion:string|null;error:string|null};
 export type CrawlRunSummary={id:string;status:string;trigger:"MANUAL"|"AUTOMATION";startedAt:string;finishedAt:string|null;errorCount:number};
 
@@ -25,14 +26,15 @@ const opportunitySelect=`SELECT o.*,s.id AS source_id,s.name AS source_name,s.me
   JOIN raw_notices rn ON rn.id=os.raw_notice_id
   JOIN sources s ON s.id=rn.source_id`;
 
-export async function listPublicOpportunities(){const result=await db().prepare(`${opportunitySelect} WHERE o.review_status<>'PENDING' ORDER BY CASE WHEN o.deadline_verification='VERIFIED' THEN 0 ELSE 1 END,o.deadline ASC,o.updated_at DESC LIMIT 200`).all<OpportunityRow>();return result.results.map(mapOpportunity);}
-export async function getOpportunity(id:string){const row=await db().prepare(`${opportunitySelect} WHERE o.id=? LIMIT 1`).bind(id).first<OpportunityRow>();return row?mapOpportunity(row):null;}
+export async function listPublicOpportunities(){const result=await db().prepare(`${opportunitySelect} WHERE o.review_status NOT IN ('PENDING','EXCLUDED') ORDER BY CASE WHEN o.deadline_verification IN ('VERIFIED','MANUAL_CONFIRMED') THEN 0 ELSE 1 END,o.deadline ASC,o.updated_at DESC LIMIT 200`).all<OpportunityRow>();return result.results.map(mapOpportunity);}
+export async function getOpportunity(id:string){const row=await db().prepare(`${opportunitySelect} WHERE o.id=? AND o.review_status<>'EXCLUDED' LIMIT 1`).bind(id).first<OpportunityRow>();return row?mapOpportunity(row):null;}
+export async function getReviewDetail(id:string):Promise<ReviewDetail|null>{const reviewSelect=opportunitySelect.replace("SELECT o.*","SELECT o.*,rn.raw_text");const row=await db().prepare(`${reviewSelect} WHERE o.id=? LIMIT 1`).bind(id).first<OpportunityRow&{raw_text:string}>();return row?{opportunity:mapOpportunity(row),rawText:row.raw_text}:null;}
 export async function countManagedSources(){const row=await db().prepare("SELECT COUNT(*) AS count FROM sources").first<{count:number}>();return row?.count??0;}
 
 export async function listReviewQueue():Promise<ReviewQueueItem[]>{
   const reviewSelect=opportunitySelect.replace("SELECT o.*","SELECT o.*,rn.raw_text");
-  const result=await db().prepare(`${reviewSelect} WHERE o.review_status IN ('PENDING','REVIEW_REQUIRED') ORDER BY o.updated_at DESC LIMIT 100`).all<OpportunityRow&{raw_text:string}>();
-  return result.results.map(row=>{const eligibility=row.eligibility_verification;const needsAttachment=eligibility==="NEEDS_ATTACHMENT";return{id:row.id,title:row.title,sourceId:row.source_id,sourceName:row.source_name,sourceUrl:row.source_url,flag:needsAttachment?"첨부 확인":"검토 필요",reason:needsAttachment?"신청자격이 첨부파일에 있어 자동 확정할 수 없습니다.":"신청자격 또는 신청 마감 근거가 충분하지 않아 운영자 검토가 필요합니다.",raw:row.eligibility_evidence??row.raw_text,tone:needsAttachment?"danger":"warning"};});
+  const result=await db().prepare(`${reviewSelect} WHERE o.review_status IN ('PENDING','REVIEW_REQUIRED','DEFERRED') ORDER BY o.updated_at DESC LIMIT 100`).all<OpportunityRow&{raw_text:string}>();
+  return result.results.map(row=>{const eligibility=row.eligibility_verification;const deferred=row.review_status==="DEFERRED";const needsAttachment=eligibility==="NEEDS_ATTACHMENT";return{id:row.id,title:row.title,sourceId:row.source_id,sourceName:row.source_name,sourceUrl:row.source_url,reviewStatus:row.review_status,flag:deferred?"보류":needsAttachment?"첨부 확인":"검토 필요",reason:deferred?"운영자가 판단을 보류한 공고입니다.":needsAttachment?"신청자격이 첨부파일에 있어 자동 확정할 수 없습니다.":"신청자격 또는 신청 마감 근거가 충분하지 않아 운영자 검토가 필요합니다.",raw:row.eligibility_evidence??row.raw_text,tone:needsAttachment?"danger":"warning"};});
 }
 
 export async function listSourceMonitor():Promise<SourceMonitorItem[]>{

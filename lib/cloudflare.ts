@@ -21,4 +21,5 @@ export type YouthGrantEnv = {
   ENVIRONMENT?: "development" | "preview" | "production";
   SITE_ORIGIN?: string;
   OPS_ACCESS_TOKEN?: string;
+  SEOUL_OPEN_API_KEY?: string;
 };
