@@ -46,13 +46,14 @@
       "name": "youthgrant",
       "vars": {
         "ENVIRONMENT": "production",
-        "SITE_ORIGIN": "https://youthgrant.workers.dev"
+        "SITE_ORIGIN": "https://youthgrant.seoeum1711.workers.dev"
       },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "youthgrant-beta",
-          "migrations_dir": "drizzle"
+          "migrations_dir": "drizzle",
+          "database_id": "383a73d8-c892-4ae9-90d4-3ac75d8eb434"
         }
       ],
       "triggers": {
