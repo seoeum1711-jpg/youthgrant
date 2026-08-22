@@ -15,16 +15,6 @@ export type D1DatabaseLike = {
   batch<T = D1ResultLike>(statements: D1PreparedStatementLike[]): Promise<T[]>;
 };
 
-export type R2ObjectBodyLike = {
-  arrayBuffer(): Promise<ArrayBuffer>;
-};
-
-export type R2BucketLike = {
-  get(key: string): Promise<R2ObjectBodyLike | null>;
-  head(key: string): Promise<unknown | null>;
-  put(key: string, value: ArrayBuffer | Uint8Array | string, options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
-};
-
 export type QueueLike<T> = {
   send(message: T): Promise<void>;
 };
@@ -32,7 +22,6 @@ export type QueueLike<T> = {
 export type YouthGrantEnv = {
   ASSETS: { fetch(request: Request): Promise<Response> };
   DB: D1DatabaseLike;
-  ATTACHMENTS?: R2BucketLike;
   ATTACHMENT_QUEUE?: QueueLike<import("./attachments/contracts.ts").AttachmentQueueMessage>;
   ENVIRONMENT?: "development" | "preview" | "production";
   SITE_ORIGIN?: string;

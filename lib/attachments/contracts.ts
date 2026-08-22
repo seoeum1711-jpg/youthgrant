@@ -27,6 +27,7 @@ export type AttachmentEvidence={
   evidenceText:string;
   attachmentId:string;
   filename:string;
+  originalUrl:string;
   location:string;
   sourceType:"ATTACHMENT";
 };

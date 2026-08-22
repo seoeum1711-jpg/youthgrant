@@ -15,6 +15,13 @@
       "when": 1787396094354,
       "tag": "0002_attachment_intelligence",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787398540315,
+      "tag": "0003_remove_r2_pointers",
+      "breakpoints": true
     }
   ]
 }

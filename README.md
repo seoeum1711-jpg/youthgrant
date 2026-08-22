@@ -9,7 +9,7 @@ Cloudflare Cron Trigger
   → Collector v3 (gfgf, gggov, mpva)
   → crawl_runs / source_runs / raw_notices
   → Attachment Discovery → D1 Registry → Cloudflare Queue
-  → R2 original → PDF/HWPX/ZIP processor → field evidence
+  → direct download → in-memory PDF/HWPX/ZIP processor → field evidence
   → conservative classifier / dedupe / verification
   → opportunities / opportunity_sources
   → D1 repository
@@ -23,7 +23,7 @@ Cloudflare Cron Trigger
 
 - TypeScript + React App Router
 - vinext + Vite + Cloudflare Vite plugin
-- Cloudflare Workers + D1 + R2 + Queues + Cron Trigger
+- Cloudflare Workers + D1 + Queues + Cron Trigger
 - Drizzle schema와 비파괴 SQL migration
 - Node test runner와 GitHub Actions
 
@@ -67,16 +67,14 @@ curl http://localhost:3000/cdn-cgi/handler/scheduled
 
 Preview와 production은 서로 다른 Worker 및 D1 이름을 사용합니다.
 
-Attachment Engine을 배포하기 전에 계정에서 R2를 한 번 활성화하고 환경별 bucket/queue를 생성합니다. 원본과 추출 artifact는 R2에, 검색 가능한 상태와 짧은 evidence는 D1에 저장합니다.
+Attachment Engine은 Queue consumer가 공식 attachment URL에서 파일을 직접 내려받아 메모리에서 처리합니다. 원본 binary와 전체 추출 문서는 저장하지 않으며, 검색 가능한 상태와 핵심 field evidence만 D1에 저장합니다.
 
 ```bash
-npx wrangler r2 bucket create youthgrant-attachments-preview
-npx wrangler r2 bucket create youthgrant-attachments
 npx wrangler queues create youthgrant-attachments-preview
 npx wrangler queues create youthgrant-attachments
 ```
 
-`wrangler.jsonc`의 `ATTACHMENTS`와 `ATTACHMENT_QUEUE` binding은 preview/production 리소스를 각각 연결합니다. Queue message에는 attachment 식별자와 URL만 포함되며 파일 bytes는 포함하지 않습니다.
+`wrangler.jsonc`의 `ATTACHMENT_QUEUE` binding은 preview/production Queue를 각각 연결합니다. Queue message에는 attachment 식별자와 URL만 포함되며 파일 bytes는 포함하지 않습니다. R2 binding은 사용하지 않습니다.
 
 ```bash
 npm run deploy:preview
@@ -122,7 +120,7 @@ Cron 표현식은 `0 */6 * * *`이며 Cloudflare 규칙에 따라 UTC로 평가�
 - FORM 문서는 자동 deadline/eligibility의 주 근거로 사용하지 않음
 - BODY와 attachment evidence가 충돌하면 자동 선택하지 않고 `REVIEW_REQUIRED`
 
-R2 key는 `attachments/{source_id}/{raw_notice_id}/{attachment_id}/original.ext` 형태이며 extraction artifact를 함께 보존해 Source 재수집 없이 재처리할 수 있습니다.
+처리가 끝나면 다운로드한 bytes와 전체 추출 결과는 폐기합니다. D1에는 attachment URL·파일명·MIME·역할·상태·처리 시각·짧은 field evidence와 오류만 남깁니다. 재처리가 필요하면 공식 attachment URL을 다시 내려받습니다.
 
 ## D1 schema
 
@@ -130,7 +128,7 @@ R2 key는 `attachments/{source_id}/{raw_notice_id}/{attachment_id}/original.ext`
 
 `sources`, `crawl_runs`, `source_runs`, `raw_notices`, `attachments`, `opportunities`, `opportunity_sources`, `collection_locks`, `saved_opportunities`
 
-Beta 0.3 migration은 기존 9개 테이블을 유지하면서 attachment 상태·R2 pointer·field evidence pointer·집계 column만 additive 방식으로 추가합니다.
+Beta 0.3 migration은 기존 9개 테이블을 유지하면서 attachment 상태·field evidence pointer·집계 column을 추가합니다. 후속 경량화 migration은 사용하지 않는 R2 pointer column만 제거합니다.
 
 `collection_locks`는 원자적 upsert와 20분 만료를 사용합니다. active lock 획득 실패 시 수집을 시작하지 않으며, 정상·오류 종료 모두 holder 기준으로 해제합니다.
 
