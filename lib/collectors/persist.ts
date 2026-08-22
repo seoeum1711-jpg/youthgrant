@@ -6,6 +6,8 @@ import type { Collector, CrawlRunResult, RawNotice, SourceDefinition, SourceRunR
 import type { AttachmentQueueMessage } from "../attachments/contracts.ts";
 import type { QueueLike } from "../cloudflare.ts";
 import { discoverAndQueueAttachments } from "../attachments/discovery.ts";
+import { assessNoticeRelevance } from "../relevance/gate.ts";
+import type { RelevanceDecision } from "../relevance/classifier.ts";
 
 export type CollectionTrigger="MANUAL"|"AUTOMATION";
 
@@ -40,28 +42,35 @@ async function acquireLock(db:D1DatabaseLike,holder:string,now:Date){
 async function releaseLock(db:D1DatabaseLike,holder:string){await db.prepare("DELETE FROM collection_locks WHERE name=? AND holder=?").bind(LOCK_NAME,holder).run();}
 
 function inferField(title:string){if(/문화|예술/.test(title))return "문화·예술";if(/안전|보호/.test(title))return "안전·보호";if(/국제|교류/.test(title))return "국제교류";if(/진로|창업/.test(title))return "진로·창업";return "청소년 활동";}
-function isOpportunityCandidate(title:string){return /(청소년|청년)/.test(title)&&/(공모|모집)/.test(title)&&/(시설|기관|단체|동아리|프로그램|활동)/.test(title);}
-
-async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDefinition,sourceRunId:string){
+async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDefinition,sourceRunId:string,relevance:RelevanceDecision){
   const rawId=await stableId("raw",notice.dedupeKey);
   const opportunityId=await stableId("opp",notice.dedupeKey);
-  const existing=await db.prepare("SELECT id FROM raw_notices WHERE dedupe_key=?").bind(notice.dedupeKey).first<{id:string}>();
+  const existing=await db.prepare(`SELECT rn.id,rn.relevance_status,o.id AS opportunity_id,o.review_status
+    FROM raw_notices rn LEFT JOIN opportunity_sources os ON os.raw_notice_id=rn.id AND os.is_primary=1
+    LEFT JOIN opportunities o ON o.id=os.opportunity_id WHERE rn.dedupe_key=? LIMIT 1`).bind(notice.dedupeKey).first<{id:string;relevance_status:string;opportunity_id:string|null;review_status:string|null}>();
+  const preserveManual=existing?.review_status===ReviewStatus.CONFIRMED||(existing?.review_status===ReviewStatus.EXCLUDED&&existing.relevance_status==="IN_SCOPE");
   if(existing){
-    await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=? WHERE id=?")
-      .bind(sourceRunId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.collectedAt,existing.id).run();
+    if(preserveManual)await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=? WHERE id=?").bind(sourceRunId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.collectedAt,existing.id).run();
+    else await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=?,relevance_status=?,relevance_reason=?,relevance_checked_at=? WHERE id=?")
+      .bind(sourceRunId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.collectedAt,relevance.status,relevance.reason,notice.collectedAt,existing.id).run();
   }else{
-    await db.prepare("INSERT INTO raw_notices (id,source_id,source_run_id,source_notice_id,title,url,published_at,raw_text,dedupe_key,collected_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
-      .bind(rawId,source.id,sourceRunId,notice.sourceNoticeId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.dedupeKey,notice.collectedAt).run();
-    if(isOpportunityCandidate(notice.title)){
-      await db.prepare(`INSERT OR IGNORE INTO opportunities
-        (id,dedupe_key,title,organization,region,field,facility_types_json,application_start,deadline,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),null,null,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.REVIEW_REQUIRED,notice.publishedAt,notice.collectedAt).run();
-      await db.prepare("INSERT OR IGNORE INTO opportunity_sources (opportunity_id,raw_notice_id,is_primary,created_at) VALUES (?,?,1,?)")
-        .bind(opportunityId,rawId,notice.collectedAt).run();
-    }
+    await db.prepare("INSERT INTO raw_notices (id,source_id,source_run_id,source_notice_id,title,url,published_at,raw_text,dedupe_key,collected_at,relevance_status,relevance_reason,relevance_checked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(rawId,source.id,sourceRunId,notice.sourceNoticeId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.dedupeKey,notice.collectedAt,relevance.status,relevance.reason,notice.collectedAt).run();
   }
-  return{state:existing?"MATCHED" as const:"NEW" as const,rawNoticeId:existing?.id??rawId};
+  const rawNoticeId=existing?.id??rawId;
+  if(!preserveManual&&relevance.status==="IN_SCOPE"){
+    await db.prepare(`INSERT OR IGNORE INTO opportunities
+      (id,dedupe_key,title,organization,region,field,facility_types_json,application_start,deadline,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),null,null,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.REVIEW_REQUIRED,notice.publishedAt,notice.collectedAt).run();
+    await db.prepare("INSERT OR IGNORE INTO opportunity_sources (opportunity_id,raw_notice_id,is_primary,created_at) VALUES (?,?,1,?)").bind(existing?.opportunity_id??opportunityId,rawNoticeId,notice.collectedAt).run();
+    if(existing?.opportunity_id&&existing.review_status===ReviewStatus.PENDING)await db.prepare("UPDATE opportunities SET review_status='REVIEW_REQUIRED',updated_at=? WHERE id=?").bind(notice.collectedAt,existing.opportunity_id).run();
+  }else if(!preserveManual&&existing?.opportunity_id&&relevance.status==="OUT_OF_SCOPE"){
+    await db.prepare("UPDATE opportunities SET review_status='EXCLUDED',updated_at=? WHERE id=?").bind(notice.collectedAt,existing.opportunity_id).run();
+  }else if(!preserveManual&&existing?.opportunity_id&&relevance.status==="RELEVANCE_REVIEW"){
+    await db.prepare("UPDATE opportunities SET review_status='PENDING',updated_at=? WHERE id=?").bind(notice.collectedAt,existing.opportunity_id).run();
+  }
+  return{state:existing?"MATCHED" as const:"NEW" as const,rawNoticeId,relevanceStatus:preserveManual?existing?.relevance_status??"IN_SCOPE":relevance.status};
 }
 
 export type AttachmentDiscoveryDependencies={queue?:QueueLike<AttachmentQueueMessage>;fetcher?:typeof fetch};
@@ -73,7 +82,7 @@ async function runSource(db:D1DatabaseLike,crawlRunId:string,collector:Collector
     VALUES (?,?,?,'RUNNING',?,0,0,0,NULL,0,0,0,0,0,'RUNNING',NULL,?,NULL,NULL)`).bind(sourceRunId,crawlRunId,collector.source.id,startedAt,parserVersion).run();
   try{
     const raw=await collector.collect();const notices=dedupeNotices(raw);let itemsNew=0;let itemsUpdated=0;let itemsMatched=0;
-    for(const notice of notices){const persisted=await persistNotice(db,notice,collector.source,sourceRunId);if(persisted.state==="NEW")itemsNew++;else{itemsUpdated++;itemsMatched++;}if(attachments)await discoverAndQueueAttachments(db,attachments.queue,collector.source,notice,persisted.rawNoticeId,sourceRunId,attachments.fetcher).catch(()=>undefined);}
+    for(const notice of notices){const relevance=await assessNoticeRelevance(notice,attachments?.fetcher);const persisted=await persistNotice(db,notice,collector.source,sourceRunId,relevance);if(persisted.state==="NEW")itemsNew++;else{itemsUpdated++;itemsMatched++;}if(attachments&&persisted.relevanceStatus==="IN_SCOPE")await discoverAndQueueAttachments(db,attachments.queue,collector.source,notice,persisted.rawNoticeId,sourceRunId,attachments.fetcher).catch(()=>undefined);}
     const finishedAt=iso();const httpStatus=collector.lastHttpStatus??null;
     await db.prepare(`UPDATE source_runs SET status='SUCCESS',finished_at=?,found=?,inserted=?,matched=?,items_found=?,items_new=?,items_updated=?,items_matched=?,items_analyzed=?,result='SUCCESS',http_status=?,parser_version=?,error=NULL,error_code=NULL,error_message=NULL WHERE id=?`)
       .bind(finishedAt,raw.length,itemsNew,itemsMatched,raw.length,itemsNew,itemsUpdated,itemsMatched,notices.length,httpStatus,parserVersion,sourceRunId).run();

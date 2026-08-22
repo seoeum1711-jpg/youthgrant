@@ -22,6 +22,13 @@
       "when": 1787398540315,
       "tag": "0003_remove_r2_pointers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787404208593,
+      "tag": "0004_opportunity_relevance",
+      "breakpoints": true
     }
   ]
 }

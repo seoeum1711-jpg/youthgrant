@@ -13,6 +13,9 @@ export type Verification = (typeof Verification)[keyof typeof Verification];
 export const ReviewStatus = { PUBLISHED:"PUBLISHED", PENDING:"PENDING", REVIEW_REQUIRED:"REVIEW_REQUIRED", CONFIRMED:"CONFIRMED", DEFERRED:"DEFERRED", EXCLUDED:"EXCLUDED" } as const;
 export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus];
 
+export const RelevanceStatus = { IN_SCOPE:"IN_SCOPE", OUT_OF_SCOPE:"OUT_OF_SCOPE", RELEVANCE_REVIEW:"RELEVANCE_REVIEW" } as const;
+export type RelevanceStatus = (typeof RelevanceStatus)[keyof typeof RelevanceStatus];
+
 export type Opportunity = {
   id:string;
   dedupeKey:string;
