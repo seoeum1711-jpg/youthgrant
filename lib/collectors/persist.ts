@@ -48,7 +48,7 @@ async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDef
   const existing=await db.prepare(`SELECT rn.id,rn.relevance_status,o.id AS opportunity_id,o.review_status
     FROM raw_notices rn LEFT JOIN opportunity_sources os ON os.raw_notice_id=rn.id AND os.is_primary=1
     LEFT JOIN opportunities o ON o.id=os.opportunity_id WHERE rn.dedupe_key=? LIMIT 1`).bind(notice.dedupeKey).first<{id:string;relevance_status:string;opportunity_id:string|null;review_status:string|null}>();
-  const preserveManual=existing?.review_status===ReviewStatus.CONFIRMED||(existing?.review_status===ReviewStatus.EXCLUDED&&existing.relevance_status==="IN_SCOPE");
+  const preserveManual=existing?.review_status===ReviewStatus.EXCLUDED&&existing.relevance_status==="IN_SCOPE";
   if(existing){
     if(preserveManual)await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=? WHERE id=?").bind(sourceRunId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.collectedAt,existing.id).run();
     else await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=?,relevance_status=?,relevance_reason=?,relevance_checked_at=? WHERE id=?")

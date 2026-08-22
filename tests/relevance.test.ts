@@ -24,8 +24,20 @@ test("known participant, education, event and cooperation noise is OUT_OF_SCOPE"
     ["청소년활동 프로그램 공모전 안내 및 참여 협조 요청","우수 프로그램과 활동 사례를 발굴하는 공모전이니 소속 기관에 참여 협조 요청드립니다."],
     ["청소년자원봉사활동 우수사례 공모전","청소년과 지도자, 운영기관의 우수 사례와 수기를 접수하고 수상작을 시상합니다."],
     ["학교단체 수련활동 상시 모집","국립청소년시설 수련활동에 참가할 학교단체의 예약 신청을 받습니다."],
+    ["청소년 축제 참가 신청","시민과 청소년 개인을 대상으로 행사 참가 신청을 받으며 기념 물품을 제공합니다."],
+    ["청소년 프로그램 참여기관 모집","선정된 학교와 기관은 무료 체험 프로그램에 참여하며 강사와 교구를 제공받습니다."],
   ];
   for(const [title,body] of cases)assert.equal(classify(title,body).status,"OUT_OF_SCOPE",title);
+});
+
+test("G-ROUND participant clubs are OUT_OF_SCOPE despite an operating-cost benefit",()=>{
+  const result=classify("청소년참여주도형활동 G-ROUND 참가 동아리 모집","모집대상은 경기도 내 만 13세부터 19세 청소년 댄스동아리입니다. 학교, 청소년시설, 지역기관 소속 모두 가능하며 참가비는 무료입니다. 참여혜택으로 동아리 운영비 지원과 프로필 촬영, 굿즈를 제공합니다.");
+  assert.equal(result.status,"OUT_OF_SCOPE");assert.match(result.reason,/동아리|참여/);
+});
+
+test("prize money does not turn a contest into an IN_SCOPE grant",()=>{
+  const result=classify("청소년 우수사례 공모전","청소년과 지도자가 사례를 제출하며 최우수상 상금 30만원과 기관장상을 시상합니다. 신청서와 활동계획서를 제출합니다.");
+  assert.equal(result.status,"OUT_OF_SCOPE");assert.match(result.reason,/상금|공모전/);
 });
 
 test("a title keyword alone never causes automatic exclusion",()=>{
