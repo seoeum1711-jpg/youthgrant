@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicHeader } from "../../components/PublicHeader";
+import { PublicFooter } from "../../components/PublicFooter";
 import { getOpportunity } from "../../../lib/data/d1-repository.ts";
 import { toGrantViewModel } from "../../../lib/domain/grant-view-model.ts";
 import { SavedGrantButton } from "../../components/saved-grants.tsx";
@@ -34,6 +35,7 @@ export default async function GrantDetail({params}:{params:Promise<{id:string}>}
       <aside className="detail-aside"><div className="cta-card"><a className="primary-cta" href={grant.sourceUrl} target="_blank" rel="noopener noreferrer">공식 공고 확인 ↗</a><SavedGrantButton grantId={grant.id} className="detail-save"/><p>{grant.sourceName} 공식 누리집으로 이동합니다.<br/>YouthGrant는 원문을 대체하지 않습니다.</p><div className="aside-summary"><Summary label="지원금" value={grant.amountLabel}/><Summary label="자부담" value={grant.selfBurdenLabel}/><Summary label="신청 마감" value={grant.dDay?`${grant.dateLabel} (${grant.dDay})`:"확인 필요"}/><Summary label="수집 방식" value={grant.sourceMethod}/><Summary label="최종 수집" value={formatKst(grant.collectedAt)}/></div></div></aside>
     </div>
     <div className="mobile-cta"><SavedGrantButton grantId={grant.id}/><a href={grant.sourceUrl} target="_blank" rel="noopener noreferrer">공식 공고 확인 ↗</a></div>
+    <PublicFooter/>
   </>;
 }
 
