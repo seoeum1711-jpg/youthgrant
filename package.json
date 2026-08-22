@@ -11,7 +11,7 @@
     "start": "vinext start",
     "test": "npm run unit",
     "typecheck": "tsc --noEmit",
-    "unit": "node --experimental-strip-types --test tests/domain.test.ts tests/collectors.test.ts tests/review.test.ts tests/security.test.ts",
+    "unit": "node --experimental-strip-types --test tests/domain.test.ts tests/collectors.test.ts tests/attachments.test.ts tests/review.test.ts tests/security.test.ts",
     "rendered": "node --test tests/rendered-html.test.mjs",
     "lint": "eslint app lib db worker tests",
     "db:generate": "drizzle-kit generate",
@@ -23,8 +23,10 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
+    "fflate": "^0.8.3",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",

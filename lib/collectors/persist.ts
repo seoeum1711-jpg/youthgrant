@@ -3,6 +3,9 @@ import { Verification, ReviewStatus } from "../domain/types.ts";
 import { dedupeNotices } from "./dedupe.ts";
 import { sourceRegistry } from "./registry.ts";
 import type { Collector, CrawlRunResult, RawNotice, SourceDefinition, SourceRunResult } from "./contracts.ts";
+import type { AttachmentQueueMessage } from "../attachments/contracts.ts";
+import type { QueueLike } from "../cloudflare.ts";
+import { discoverAndQueueAttachments } from "../attachments/discovery.ts";
 
 export type CollectionTrigger="MANUAL"|"AUTOMATION";
 
@@ -58,17 +61,19 @@ async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDef
         .bind(opportunityId,rawId,notice.collectedAt).run();
     }
   }
-  return existing?"MATCHED" as const:"NEW" as const;
+  return{state:existing?"MATCHED" as const:"NEW" as const,rawNoticeId:existing?.id??rawId};
 }
 
-async function runSource(db:D1DatabaseLike,crawlRunId:string,collector:Collector):Promise<SourceRunResult>{
+export type AttachmentDiscoveryDependencies={queue?:QueueLike<AttachmentQueueMessage>;fetcher?:typeof fetch};
+
+async function runSource(db:D1DatabaseLike,crawlRunId:string,collector:Collector,attachments?:AttachmentDiscoveryDependencies):Promise<SourceRunResult>{
   const sourceRunId=crypto.randomUUID();const startedAt=iso();const parserVersion=collector.parserVersion??"v3-unknown";
   await db.prepare(`INSERT INTO source_runs
     (id,crawl_run_id,source_id,status,started_at,found,inserted,matched,error,items_found,items_new,items_updated,items_matched,items_analyzed,result,http_status,parser_version,error_code,error_message)
     VALUES (?,?,?,'RUNNING',?,0,0,0,NULL,0,0,0,0,0,'RUNNING',NULL,?,NULL,NULL)`).bind(sourceRunId,crawlRunId,collector.source.id,startedAt,parserVersion).run();
   try{
     const raw=await collector.collect();const notices=dedupeNotices(raw);let itemsNew=0;let itemsUpdated=0;let itemsMatched=0;
-    for(const notice of notices){const state=await persistNotice(db,notice,collector.source,sourceRunId);if(state==="NEW")itemsNew++;else{itemsUpdated++;itemsMatched++;}}
+    for(const notice of notices){const persisted=await persistNotice(db,notice,collector.source,sourceRunId);if(persisted.state==="NEW")itemsNew++;else{itemsUpdated++;itemsMatched++;}if(attachments)await discoverAndQueueAttachments(db,attachments.queue,collector.source,notice,persisted.rawNoticeId,sourceRunId,attachments.fetcher).catch(()=>undefined);}
     const finishedAt=iso();const httpStatus=collector.lastHttpStatus??null;
     await db.prepare(`UPDATE source_runs SET status='SUCCESS',finished_at=?,found=?,inserted=?,matched=?,items_found=?,items_new=?,items_updated=?,items_matched=?,items_analyzed=?,result='SUCCESS',http_status=?,parser_version=?,error=NULL,error_code=NULL,error_message=NULL WHERE id=?`)
       .bind(finishedAt,raw.length,itemsNew,itemsMatched,raw.length,itemsNew,itemsUpdated,itemsMatched,notices.length,httpStatus,parserVersion,sourceRunId).run();
@@ -81,14 +86,14 @@ async function runSource(db:D1DatabaseLike,crawlRunId:string,collector:Collector
   }
 }
 
-export async function runCollectionToD1(db:D1DatabaseLike,collectors:Collector[],trigger:CollectionTrigger):Promise<CrawlRunResult>{
+export async function runCollectionToD1(db:D1DatabaseLike,collectors:Collector[],trigger:CollectionTrigger,attachments?:AttachmentDiscoveryDependencies):Promise<CrawlRunResult>{
   const holder=crypto.randomUUID();const lockTime=new Date();if(!await acquireLock(db,holder,lockTime))throw new CollectionLockedError();
   const crawlRunId=crypto.randomUUID();const startedAt=lockTime.toISOString();
   try{
     await seedSources(db,startedAt);
     await db.prepare("INSERT INTO crawl_runs (id,status,started_at,trigger,error_count) VALUES (?,'RUNNING',?,?,0)").bind(crawlRunId,startedAt,trigger).run();
     const sourceRuns:SourceRunResult[]=[];
-    for(const collector of collectors)sourceRuns.push(await runSource(db,crawlRunId,collector));
+    for(const collector of collectors)sourceRuns.push(await runSource(db,crawlRunId,collector,attachments));
     const failures=sourceRuns.filter(run=>run.status==="FAILED").length;const status=failures===0?"SUCCESS":failures===sourceRuns.length?"FAILED":"PARTIAL";const finishedAt=iso();
     await db.prepare("UPDATE crawl_runs SET status=?,finished_at=?,error_count=? WHERE id=?").bind(status,finishedAt,failures,crawlRunId).run();
     return{id:crawlRunId,trigger,startedAt,finishedAt,status,sourceRuns};

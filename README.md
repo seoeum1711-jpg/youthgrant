@@ -8,6 +8,8 @@ YouthGrant는 청소년시설 실무자가 검토할 가치가 있는 공모사�
 Cloudflare Cron Trigger
   → Collector v3 (gfgf, gggov, mpva)
   → crawl_runs / source_runs / raw_notices
+  → Attachment Discovery → D1 Registry → Cloudflare Queue
+  → R2 original → PDF/HWPX/ZIP processor → field evidence
   → conservative classifier / dedupe / verification
   → opportunities / opportunity_sources
   → D1 repository
@@ -21,7 +23,7 @@ Cloudflare Cron Trigger
 
 - TypeScript + React App Router
 - vinext + Vite + Cloudflare Vite plugin
-- Cloudflare Workers + D1 + Cron Trigger
+- Cloudflare Workers + D1 + R2 + Queues + Cron Trigger
 - Drizzle schema와 비파괴 SQL migration
 - Node test runner와 GitHub Actions
 
@@ -65,6 +67,17 @@ curl http://localhost:3000/cdn-cgi/handler/scheduled
 
 Preview와 production은 서로 다른 Worker 및 D1 이름을 사용합니다.
 
+Attachment Engine을 배포하기 전에 계정에서 R2를 한 번 활성화하고 환경별 bucket/queue를 생성합니다. 원본과 추출 artifact는 R2에, 검색 가능한 상태와 짧은 evidence는 D1에 저장합니다.
+
+```bash
+npx wrangler r2 bucket create youthgrant-attachments-preview
+npx wrangler r2 bucket create youthgrant-attachments
+npx wrangler queues create youthgrant-attachments-preview
+npx wrangler queues create youthgrant-attachments
+```
+
+`wrangler.jsonc`의 `ATTACHMENTS`와 `ATTACHMENT_QUEUE` binding은 preview/production 리소스를 각각 연결합니다. Queue message에는 attachment 식별자와 URL만 포함되며 파일 bytes는 포함하지 않습니다.
+
 ```bash
 npm run deploy:preview
 npm run deploy:production
@@ -98,11 +111,26 @@ Cron 표현식은 `0 */6 * * *`이며 Cloudflare 규칙에 따라 UTC로 평가�
 
 따라서 Ops secret 누락이 Public 공개를 위해 Ops를 노출시키는 방향으로 실패하지 않습니다.
 
+## Attachment 처리 정책
+
+- PDF: text layer를 페이지 단위로 추출하며 텍스트가 부족하면 `OCR_REQUIRED`
+- HWPX: ZIP/XML package 검증 후 section·paragraph·table 텍스트 추출
+- HWP: 검증된 Workers parser가 없으면 `HWP_PARSER_BLOCKED`
+- ZIP: path traversal 방어, 최대 200 entries, 25 MiB unpacked, nested depth 1
+- JPG/PNG: 원본·크기 metadata 보존 후 `OCR_REQUIRED`
+- attachment 단일 파일 한도: 10 MiB
+- FORM 문서는 자동 deadline/eligibility의 주 근거로 사용하지 않음
+- BODY와 attachment evidence가 충돌하면 자동 선택하지 않고 `REVIEW_REQUIRED`
+
+R2 key는 `attachments/{source_id}/{raw_notice_id}/{attachment_id}/original.ext` 형태이며 extraction artifact를 함께 보존해 Source 재수집 없이 재처리할 수 있습니다.
+
 ## D1 schema
 
 유지하는 9개 테이블:
 
 `sources`, `crawl_runs`, `source_runs`, `raw_notices`, `attachments`, `opportunities`, `opportunity_sources`, `collection_locks`, `saved_opportunities`
+
+Beta 0.3 migration은 기존 9개 테이블을 유지하면서 attachment 상태·R2 pointer·field evidence pointer·집계 column만 additive 방식으로 추가합니다.
 
 `collection_locks`는 원자적 upsert와 20분 만료를 사용합니다. active lock 획득 실패 시 수집을 시작하지 않으며, 정상·오류 종료 모두 holder 기준으로 해제합니다.
 

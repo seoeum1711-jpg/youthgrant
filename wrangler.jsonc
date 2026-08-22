@@ -14,6 +14,13 @@
       "migrations_dir": "drizzle"
     }
   ],
+  "r2_buckets": [
+    { "binding": "ATTACHMENTS", "bucket_name": "youthgrant-attachments-local" }
+  ],
+  "queues": {
+    "producers": [{ "binding": "ATTACHMENT_QUEUE", "queue": "youthgrant-attachments-local" }],
+    "consumers": [{ "queue": "youthgrant-attachments-local", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3 }]
+  },
   "vars": {
     "ENVIRONMENT": "development",
     "SITE_ORIGIN": "http://localhost:3000"
@@ -38,6 +45,13 @@
           "migrations_dir": "drizzle"
         }
       ],
+      "r2_buckets": [
+        { "binding": "ATTACHMENTS", "bucket_name": "youthgrant-attachments-preview" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "ATTACHMENT_QUEUE", "queue": "youthgrant-attachments-preview" }],
+        "consumers": [{ "queue": "youthgrant-attachments-preview", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3 }]
+      },
       "triggers": {
         "crons": []
       }
@@ -56,6 +70,13 @@
           "database_id": "383a73d8-c892-4ae9-90d4-3ac75d8eb434"
         }
       ],
+      "r2_buckets": [
+        { "binding": "ATTACHMENTS", "bucket_name": "youthgrant-attachments" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "ATTACHMENT_QUEUE", "queue": "youthgrant-attachments" }],
+        "consumers": [{ "queue": "youthgrant-attachments", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3 }]
+      },
       "triggers": {
         "crons": ["0 */6 * * *"]
       }

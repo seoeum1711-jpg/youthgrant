@@ -1,0 +1,43 @@
+ALTER TABLE `raw_notices` ADD `attachment_discovery_status` text DEFAULT 'PENDING' NOT NULL;
+ALTER TABLE `raw_notices` ADD `attachment_discovered_at` text;
+
+ALTER TABLE `attachments` ADD `source_id` text;
+ALTER TABLE `attachments` ADD `source_run_id` text;
+ALTER TABLE `attachments` ADD `parent_attachment_id` text;
+ALTER TABLE `attachments` ADD `extension` text;
+ALTER TABLE `attachments` ADD `size_bytes` integer;
+ALTER TABLE `attachments` ADD `document_role` text DEFAULT 'UNKNOWN' NOT NULL;
+ALTER TABLE `attachments` ADD `priority` integer DEFAULT 20 NOT NULL;
+ALTER TABLE `attachments` ADD `fetch_status` text DEFAULT 'DISCOVERED' NOT NULL;
+ALTER TABLE `attachments` ADD `parse_status` text DEFAULT 'PENDING' NOT NULL;
+ALTER TABLE `attachments` ADD `parse_method` text;
+ALTER TABLE `attachments` ADD `content_hash` text;
+ALTER TABLE `attachments` ADD `r2_key` text;
+ALTER TABLE `attachments` ADD `extraction_r2_key` text;
+ALTER TABLE `attachments` ADD `archive_depth` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `attachments` ADD `evidence_json` text DEFAULT '[]' NOT NULL;
+ALTER TABLE `attachments` ADD `error_code` text;
+ALTER TABLE `attachments` ADD `error_message` text;
+ALTER TABLE `attachments` ADD `processed_at` text;
+CREATE UNIQUE INDEX `uq_attachments_raw_url` ON `attachments` (`raw_notice_id`,`url`);
+CREATE INDEX `idx_attachments_parse_priority` ON `attachments` (`parse_status`,`priority`,`created_at`);
+
+ALTER TABLE `source_runs` ADD `attachments_discovered` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `attachments_fetch_success` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `attachments_parse_success` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `attachments_parse_failed` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `attachments_ocr_required` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `fields_recovered` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `source_runs` ADD `fields_verified_by_attachment` integer DEFAULT 0 NOT NULL;
+
+ALTER TABLE `opportunities` ADD `eligible_region` text;
+ALTER TABLE `opportunities` ADD `deadline_evidence_source_type` text;
+ALTER TABLE `opportunities` ADD `deadline_evidence_attachment_id` text;
+ALTER TABLE `opportunities` ADD `eligibility_evidence_source_type` text;
+ALTER TABLE `opportunities` ADD `eligibility_evidence_attachment_id` text;
+ALTER TABLE `opportunities` ADD `amount_evidence` text;
+ALTER TABLE `opportunities` ADD `amount_evidence_source_type` text;
+ALTER TABLE `opportunities` ADD `amount_evidence_attachment_id` text;
+ALTER TABLE `opportunities` ADD `self_burden_evidence` text;
+ALTER TABLE `opportunities` ADD `self_burden_evidence_source_type` text;
+ALTER TABLE `opportunities` ADD `self_burden_evidence_attachment_id` text;

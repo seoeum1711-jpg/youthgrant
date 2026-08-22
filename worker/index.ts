@@ -4,9 +4,13 @@ import { CollectionLockedError, runCollectionToD1 } from "../lib/collectors/pers
 import type { YouthGrantEnv } from "../lib/cloudflare.ts";
 import { isOpsAuthorized, isProtectedOpsPath, opsDeniedResponse } from "../lib/security/ops-auth.ts";
 import { applyOpportunityReview, parseReviewMutation } from "../lib/data/review-mutation.ts";
+import { processAttachmentMessage } from "../lib/attachments/pipeline.ts";
+import type { AttachmentQueueMessage } from "../lib/attachments/contracts.ts";
 
 type WorkerExecutionContext={waitUntil(promise:Promise<unknown>):void;passThroughOnException():void};
 type ScheduledControllerLike={cron:string;scheduledTime:number;type:string};
+type QueueMessageLike<T>={body:T;ack():void;retry(options?:{delaySeconds?:number}):void};
+type QueueBatchLike<T>={messages:QueueMessageLike<T>[]};
 
 const worker={
   async fetch(request:Request,env:YouthGrantEnv,ctx:WorkerExecutionContext):Promise<Response>{
@@ -14,7 +18,7 @@ const worker={
     if(isProtectedOpsPath(url.pathname)&&!await isOpsAuthorized(request,env))return opsDeniedResponse(env);
     if(url.pathname==="/api/ops/collect"){
       if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405,headers:{allow:"POST"}});
-      try{const result=await runCollectionToD1(env.DB,betaCollectors(env),"MANUAL");return Response.json(result);}
+      try{const result=await runCollectionToD1(env.DB,betaCollectors(env),"MANUAL",{queue:env.ATTACHMENT_QUEUE});return Response.json(result);}
       catch(error){if(error instanceof CollectionLockedError)return Response.json({error:error.message},{status:423});throw error;}
     }
     const reviewMatch=url.pathname.match(/^\/api\/ops\/review\/([^/]+)$/);
@@ -27,9 +31,10 @@ const worker={
     return handler.fetch(request,env,ctx);
   },
   async scheduled(_controller:ScheduledControllerLike,env:YouthGrantEnv){
-    try{await runCollectionToD1(env.DB,betaCollectors(env),"AUTOMATION");}
+    try{await runCollectionToD1(env.DB,betaCollectors(env),"AUTOMATION",{queue:env.ATTACHMENT_QUEUE});}
     catch(error){if(error instanceof CollectionLockedError)return;throw error;}
   },
+  async queue(batch:QueueBatchLike<AttachmentQueueMessage>,env:YouthGrantEnv){for(const message of batch.messages){try{await processAttachmentMessage(env,message.body);message.ack();}catch{message.retry({delaySeconds:60});}}},
 };
 
 export default worker;
