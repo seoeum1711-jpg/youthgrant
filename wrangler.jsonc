@@ -68,6 +68,9 @@
         "producers": [{ "binding": "ATTACHMENT_QUEUE", "queue": "youthgrant-attachments" }],
         "consumers": [{ "queue": "youthgrant-attachments", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3, "max_concurrency": 1, "dead_letter_queue": "youthgrant-attachments-dlq" }]
       },
+      "ratelimits": [
+        { "name": "CONTACT_RATE_LIMIT", "namespace_id": "805101", "simple": { "limit": 5, "period": 60 } }
+      ],
       "triggers": {
         "crons": ["0 */6 * * *"]
       }

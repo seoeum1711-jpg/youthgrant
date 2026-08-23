@@ -6,6 +6,7 @@ import { isOpsAuthorized, isProtectedOpsPath, opsDeniedResponse } from "../lib/s
 import { applyOpportunityReview, parseReviewMutation } from "../lib/data/review-mutation.ts";
 import { processAttachmentMessage } from "../lib/attachments/pipeline.ts";
 import type { AttachmentQueueMessage } from "../lib/attachments/contracts.ts";
+import { ContactValidationError, parseContactSubmission, sendContactEmail } from "../lib/contact.ts";
 
 type WorkerExecutionContext={waitUntil(promise:Promise<unknown>):void;passThroughOnException():void};
 type ScheduledControllerLike={cron:string;scheduledTime:number;type:string};
@@ -16,6 +17,14 @@ const worker={
   async fetch(request:Request,env:YouthGrantEnv,ctx:WorkerExecutionContext):Promise<Response>{
     const url=new URL(request.url);
     if(isProtectedOpsPath(url.pathname)&&!await isOpsAuthorized(request,env))return opsDeniedResponse(env);
+    if(url.pathname==="/api/contact"){
+      if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405,headers:{allow:"POST"}});
+      try{
+        const parsed=parseContactSubmission(await request.text());if(parsed.spam)return Response.json({ok:true});
+        if(env.CONTACT_RATE_LIMIT){const key=request.headers.get("cf-connecting-ip")??"anonymous";const allowed=await env.CONTACT_RATE_LIMIT.limit({key:`contact:${key}`});if(!allowed.success)return Response.json({error:"잠시 후 다시 시도해 주세요."},{status:429});}
+        await sendContactEmail(parsed.submission,env);return Response.json({ok:true});
+      }catch(error){if(error instanceof ContactValidationError)return Response.json({error:"입력 내용을 확인해 주세요."},{status:400});console.error("Contact delivery failed");return Response.json({error:"문의 전송에 실패했습니다. 잠시 후 다시 시도해 주세요."},{status:503});}
+    }
     if(url.pathname==="/api/ops/collect"){
       if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405,headers:{allow:"POST"}});
       try{const result=await runCollectionToD1(env.DB,betaCollectors(env),"MANUAL",{queue:env.ATTACHMENT_QUEUE});return Response.json(result);}

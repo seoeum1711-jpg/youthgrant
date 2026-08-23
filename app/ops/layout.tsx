@@ -1,2 +1,2 @@
-import Link from "next/link";
-export default function OpsLayout({children}:{children:React.ReactNode}){return <div className="ops-shell"><header className="ops-header"><Link className="ops-brand" href="/"><span className="brand-mark"/>YouthGrant <b>OPS</b></Link><nav><Link href="/ops/review">검토대기</Link><Link href="/ops/sources">Source Monitor</Link></nav><span className="ops-user">Public Beta 운영 화면</span></header>{children}</div>}
+/* eslint-disable @next/next/no-html-link-for-pages -- vinext production navigation requires full-page links. */
+export default function OpsLayout({children}:{children:React.ReactNode}){return <div className="ops-shell"><header className="ops-header"><a className="ops-brand" href="/"><span className="brand-mark"/>YouthGrant <b>OPS</b></a><nav><a href="/ops/review">검토대기</a><a href="/ops/sources">Source Monitor</a></nav><span className="ops-user">Public Beta 운영 화면</span></header>{children}</div>}

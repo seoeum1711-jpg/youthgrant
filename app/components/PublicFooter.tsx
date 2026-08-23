@@ -9,7 +9,7 @@ export function PublicFooter(){
         <div className="footer-utility">
           <p className="footer-operator">운영·제작 청록</p>
           <span className="footer-divider" aria-hidden="true">|</span>
-          <a className="footer-contact" href="mailto:youthgreen94@gmail.com?subject=%5BYouthGrant%20문의%20및%20오류제보%5D">문의 및 오류제보</a>
+          <a className="footer-contact" href="/contact">문의 및 오류제보</a>
         </div>
       </div>
       <p className="footer-copyright">© 2026 YouthGrant. All rights reserved.</p>

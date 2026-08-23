@@ -19,6 +19,10 @@ export type QueueLike<T> = {
   send(message: T): Promise<void>;
 };
 
+export type RateLimiterLike = {
+  limit(options:{key:string}):Promise<{success:boolean}>;
+};
+
 export type YouthGrantEnv = {
   ASSETS: { fetch(request: Request): Promise<Response> };
   DB: D1DatabaseLike;
@@ -27,4 +31,7 @@ export type YouthGrantEnv = {
   SITE_ORIGIN?: string;
   OPS_ACCESS_TOKEN?: string;
   SEOUL_OPEN_API_KEY?: string;
+  RESEND_API_KEY?: string;
+  CONTACT_FROM_EMAIL?: string;
+  CONTACT_RATE_LIMIT?: RateLimiterLike;
 };
