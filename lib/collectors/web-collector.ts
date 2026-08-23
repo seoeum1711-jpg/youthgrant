@@ -1,5 +1,6 @@
 import { makeDedupeKey } from "./dedupe.ts";
 import type { Collector, RawNotice, SourceDefinition } from "./contracts.ts";
+import { FetchPolicyError, fetchWithPolicy } from "./fetch-policy.ts";
 
 const TITLE_HINT=/(공모|모집\s*공고|사업\s*공고|참가.{0,20}모집|지원사업|참여기관)/;
 function decode(value:string){return value.replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#(\d+);/g,(_,code)=>String.fromCodePoint(Number(code))).replace(/&(?:#39|apos);/g,"'").replace(/\s+/g," ").trim();}
@@ -9,11 +10,11 @@ export class OfficialBoardCollector implements Collector{
   source:SourceDefinition;
   parserVersion="v3-web-1";
   lastHttpStatus:number|null=null;
-  constructor(source:SourceDefinition){this.source=source;}
+  private fetcher:typeof fetch;
+  constructor(source:SourceDefinition,fetcher:typeof fetch=globalThis.fetch.bind(globalThis)){this.source=source;this.fetcher=fetcher;}
   async collect(signal?:AbortSignal):Promise<RawNotice[]>{
-    const response=await fetch(this.source.url,{signal,headers:{"user-agent":"YouthGrant-Public-Beta/3.0 (+https://youthgrant.example)"}});
+    let response:Response;try{response=await fetchWithPolicy(this.source.url,{signal,headers:{"user-agent":"YouthGrant-Public-Beta/3.0 (+https://youthgrant.example)"}},{fetcher:this.fetcher});}catch(error){if(error instanceof FetchPolicyError)this.lastHttpStatus=error.status;throw error;}
     this.lastHttpStatus=response.status;
-    if(!response.ok)throw new Error(`HTTP ${response.status}`);
     const html=await response.text();const collectedAt=new Date().toISOString();const results:RawNotice[]=[];
     const links=html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
     for(const match of links){const title=decode(match[2]);if(title.length<8||title.length>180||!TITLE_HINT.test(title))continue;const url=absolute(this.source.url,match[1]);results.push({sourceId:this.source.id,sourceNoticeId:null,title,url,publishedAt:null,rawText:title,collectedAt,dedupeKey:makeDedupeKey(this.source.id,title,url)});if(results.length>=60)break;}
@@ -30,7 +31,7 @@ export class YouthBoardCollector implements Collector{
   source:SourceDefinition;parserVersion="v4-youth-board-1";lastHttpStatus:number|null=null;private fetcher:typeof fetch;
   constructor(source:SourceDefinition,fetcher:typeof fetch=fetch){if(!YOUTH_SOURCE_IDS.has(source.id))throw new Error(`Unsupported youth board source: ${source.id}`);this.source=source;this.fetcher=fetcher;}
   async collect(signal?:AbortSignal):Promise<RawNotice[]>{
-    const response=await this.fetcher(this.source.url,{signal,headers:{"user-agent":"YouthGrant-Public-Beta/4.0 (+https://youthgrant.seoeum1711.workers.dev)"}});this.lastHttpStatus=response.status;if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    let response:Response;try{response=await fetchWithPolicy(this.source.url,{signal,headers:{"user-agent":"YouthGrant-Public-Beta/4.0 (+https://youthgrant.seoeum1711.workers.dev)"}},{fetcher:this.fetcher});}catch(error){if(error instanceof FetchPolicyError)this.lastHttpStatus=error.status;throw error;}this.lastHttpStatus=response.status;
     const charset=response.headers.get("content-type")?.match(/charset=([^;\s]+)/i)?.[1]??"utf-8";const encoding=/euc-?kr|ks_c_5601/i.test(charset)?"euc-kr":"utf-8";const html=new TextDecoder(encoding).decode(await response.arrayBuffer());const collectedAt=new Date().toISOString();const results:RawNotice[]=[];const seen=new Set<string>();
     const add=(title:string,url:string,index:number)=>{title=decode(title);if(title.length<8||title.length>180||!YOUTH_NOTICE_HINT.test(title)||seen.has(url))return;seen.add(url);results.push({sourceId:this.source.id,sourceNoticeId:noticeId(url),title,url,publishedAt:dateNear(html,index),rawText:title,collectedAt,dedupeKey:makeDedupeKey(this.source.id,title,url)});};
     if(this.source.id==="ggyouth"){

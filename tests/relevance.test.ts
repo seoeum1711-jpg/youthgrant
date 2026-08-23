@@ -64,6 +64,6 @@ test("detail focus does not use unrelated next-post keywords",async()=>{
 
 test("detail fetch failure is isolated as RELEVANCE_REVIEW",async()=>{
   const title="청소년 활동 운영기관 모집";const notice:RawNotice={sourceId:"test",sourceNoticeId:"2",title,url:"https://example.com/2",publishedAt:null,rawText:title,collectedAt:"2026-08-22T00:00:00.000Z",dedupeKey:makeDedupeKey("test",title,"https://example.com/2")};
-  const fetcher:typeof fetch=async()=>{throw new Error("blocked")};
+  const fetcher:typeof fetch=async()=>new Response("blocked",{status:403});
   assert.equal((await assessNoticeRelevance(notice,fetcher)).status,"RELEVANCE_REVIEW");
 });

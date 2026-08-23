@@ -1,5 +1,6 @@
 import type { D1DatabaseLike, YouthGrantEnv } from "../cloudflare.ts";
 import type { AttachmentEvidence, AttachmentProcessResult, AttachmentQueueMessage, DocumentRole } from "./contracts.ts";
+import { FetchPolicyError, fetchWithTimeout } from "../collectors/fetch-policy.ts";
 import { classifyDocumentRole } from "./discovery.ts";
 import { detectAttachmentFormat, extensionOf } from "./file-type.ts";
 import { parseAttachmentBytes } from "./parsers.ts";
@@ -51,7 +52,7 @@ async function metric(db:D1DatabaseLike,sourceRunId:string|null,column:string,am
 
 async function loadBytes(row:AttachmentRow,fetcher:typeof fetch){
   if(row.url.startsWith("zip:"))throw new Error("ZIP_CHILD_REPROCESS_REQUIRES_PARENT");
-  const response=await fetcher(row.url,{headers:{"user-agent":"YouthGrant-Public-Beta/3.0 (+https://youthgrant.seoeum1711.workers.dev)"}});
+  const response=await fetchWithTimeout(row.url,{headers:{"user-agent":"YouthGrant-Public-Beta/3.0 (+https://youthgrant.seoeum1711.workers.dev)"}},{fetcher});
   if(!response.ok)throw new Error(`ATTACHMENT_HTTP_${response.status}`);
   const declared=Number(response.headers.get("content-length")??0);
   if(declared>MAX_ATTACHMENT_BYTES)throw new Error("ATTACHMENT_TOO_LARGE");
@@ -106,7 +107,7 @@ async function processZipChildren(db:D1DatabaseLike,parent:AttachmentRow,childre
 
 async function fail(db:D1DatabaseLike,row:AttachmentRow,error:unknown){
   const message=error instanceof Error?error.message:"Attachment processing failed";
-  const code=/^[A-Z0-9_]+$/.test(message)?message:"ATTACHMENT_PROCESSING_FAILED";
+  const code=error instanceof FetchPolicyError?error.code:/^[A-Z0-9_]+$/.test(message)?message:"ATTACHMENT_PROCESSING_FAILED";
   await db.prepare("UPDATE attachments SET fetch_status=CASE WHEN fetch_status='FETCHED' THEN fetch_status ELSE 'FETCH_FAILED' END,parse_status='PARSE_FAILED',error_code=?,error_message=?,processed_at=? WHERE id=?")
     .bind(code,message,new Date().toISOString(),row.id).run();
   if(row.parse_status!=="PARSE_FAILED")await metric(db,row.source_run_id,"attachments_parse_failed");

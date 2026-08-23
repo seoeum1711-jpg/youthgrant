@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- vinext production navigation requires full-page links. */
 import { getLatestCrawlRun } from "../../lib/data/d1-repository.ts";
 
 function kst(value:string){return new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(value));}

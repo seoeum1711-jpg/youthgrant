@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-html-link-for-pages -- vinext production navigation requires a full-page link. */
 import type { GrantViewModel } from "../../lib/domain/types.ts";
 import { GrantCard } from "../components/ExplorerClient.tsx";
 import { useSavedGrantIds } from "../components/saved-grants.tsx";

@@ -16,7 +16,7 @@
   ],
   "queues": {
     "producers": [{ "binding": "ATTACHMENT_QUEUE", "queue": "youthgrant-attachments-local" }],
-    "consumers": [{ "queue": "youthgrant-attachments-local", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3 }]
+    "consumers": [{ "queue": "youthgrant-attachments-local", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3, "max_concurrency": 1, "dead_letter_queue": "youthgrant-attachments-local-dlq" }]
   },
   "vars": {
     "ENVIRONMENT": "development",
@@ -44,7 +44,7 @@
       ],
       "queues": {
         "producers": [{ "binding": "ATTACHMENT_QUEUE", "queue": "youthgrant-attachments-preview" }],
-        "consumers": [{ "queue": "youthgrant-attachments-preview", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3 }]
+        "consumers": [{ "queue": "youthgrant-attachments-preview", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3, "max_concurrency": 1, "dead_letter_queue": "youthgrant-attachments-preview-dlq" }]
       },
       "triggers": {
         "crons": []
@@ -66,7 +66,7 @@
       ],
       "queues": {
         "producers": [{ "binding": "ATTACHMENT_QUEUE", "queue": "youthgrant-attachments" }],
-        "consumers": [{ "queue": "youthgrant-attachments", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3 }]
+        "consumers": [{ "queue": "youthgrant-attachments", "max_batch_size": 1, "max_batch_timeout": 5, "max_retries": 3, "max_concurrency": 1, "dead_letter_queue": "youthgrant-attachments-dlq" }]
       },
       "triggers": {
         "crons": ["0 */6 * * *"]

@@ -8,6 +8,7 @@ import type { QueueLike } from "../cloudflare.ts";
 import { discoverAndQueueAttachments } from "../attachments/discovery.ts";
 import { assessNoticeRelevance } from "../relevance/gate.ts";
 import type { RelevanceDecision } from "../relevance/classifier.ts";
+import { classifySourceFailure } from "./fetch-policy.ts";
 
 export type CollectionTrigger="MANUAL"|"AUTOMATION";
 
@@ -84,14 +85,15 @@ async function runSource(db:D1DatabaseLike,crawlRunId:string,collector:Collector
     const raw=await collector.collect();const notices=dedupeNotices(raw);let itemsNew=0;let itemsUpdated=0;let itemsMatched=0;
     for(const notice of notices){const relevance=await assessNoticeRelevance(notice,attachments?.fetcher);const persisted=await persistNotice(db,notice,collector.source,sourceRunId,relevance);if(persisted.state==="NEW")itemsNew++;else{itemsUpdated++;itemsMatched++;}if(attachments&&persisted.relevanceStatus==="IN_SCOPE")await discoverAndQueueAttachments(db,attachments.queue,collector.source,notice,persisted.rawNoticeId,sourceRunId,attachments.fetcher).catch(()=>undefined);}
     const finishedAt=iso();const httpStatus=collector.lastHttpStatus??null;
-    await db.prepare(`UPDATE source_runs SET status='SUCCESS',finished_at=?,found=?,inserted=?,matched=?,items_found=?,items_new=?,items_updated=?,items_matched=?,items_analyzed=?,result='SUCCESS',http_status=?,parser_version=?,error=NULL,error_code=NULL,error_message=NULL WHERE id=?`)
-      .bind(finishedAt,raw.length,itemsNew,itemsMatched,raw.length,itemsNew,itemsUpdated,itemsMatched,notices.length,httpStatus,parserVersion,sourceRunId).run();
-    return{sourceId:collector.source.id,status:"SUCCESS",startedAt,finishedAt,found:raw.length,inserted:itemsNew,updated:itemsUpdated,matched:itemsMatched,analyzed:notices.length,httpStatus,parserVersion,error:null,notices};
+    const result=raw.length?"SUCCESS_WITH_ITEMS" as const:"SUCCESS_NO_ITEMS" as const;
+    await db.prepare(`UPDATE source_runs SET status='SUCCESS',finished_at=?,found=?,inserted=?,matched=?,items_found=?,items_new=?,items_updated=?,items_matched=?,items_analyzed=?,result=?,http_status=?,parser_version=?,error=NULL,error_code=NULL,error_message=NULL WHERE id=?`)
+      .bind(finishedAt,raw.length,itemsNew,itemsMatched,raw.length,itemsNew,itemsUpdated,itemsMatched,notices.length,result,httpStatus,parserVersion,sourceRunId).run();
+    return{sourceId:collector.source.id,status:"SUCCESS",result,startedAt,finishedAt,found:raw.length,inserted:itemsNew,updated:itemsUpdated,matched:itemsMatched,analyzed:notices.length,httpStatus,parserVersion,errorCode:null,error:null,notices};
   }catch(error){
-    const finishedAt=iso();const message=error instanceof Error?error.message:"Unknown collector error";const httpStatus=collector.lastHttpStatus??null;
-    await db.prepare(`UPDATE source_runs SET status='FAILED',finished_at=?,result='FAILED',http_status=?,parser_version=?,error=?,error_code='COLLECTOR_ERROR',error_message=? WHERE id=?`)
-      .bind(finishedAt,httpStatus,parserVersion,message,message,sourceRunId).run();
-    return{sourceId:collector.source.id,status:"FAILED",startedAt,finishedAt,found:0,inserted:0,updated:0,matched:0,analyzed:0,httpStatus,parserVersion,error:message,notices:[]};
+    const finishedAt=iso();const failure=classifySourceFailure(error);const httpStatus=collector.lastHttpStatus??failure.httpStatus;
+    await db.prepare(`UPDATE source_runs SET status='FAILED',finished_at=?,result='FAILED',http_status=?,parser_version=?,error=?,error_code=?,error_message=? WHERE id=?`)
+      .bind(finishedAt,httpStatus,parserVersion,failure.message,failure.code,failure.message,sourceRunId).run();
+    return{sourceId:collector.source.id,status:"FAILED",result:"FAILED",startedAt,finishedAt,found:0,inserted:0,updated:0,matched:0,analyzed:0,httpStatus,parserVersion,errorCode:failure.code,error:failure.message,notices:[]};
   }
 }
 

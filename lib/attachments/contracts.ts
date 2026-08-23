@@ -1,6 +1,7 @@
 export type AttachmentFormat="PDF"|"HWPX"|"HWP"|"ZIP"|"JPG"|"PNG"|"UNSUPPORTED";
 export type DocumentRole="PRIMARY"|"SUPPORTING"|"FORM"|"MEDIA"|"UNKNOWN";
 export type AttachmentParseStatus="PENDING"|"PARSED"|"OCR_REQUIRED"|"PARSE_FAILED"|"UNSUPPORTED"|"HWP_PARSER_BLOCKED"|"QUEUE_BLOCKED";
+export type AttachmentDiscoveryStatus="PENDING"|"COMPLETE"|"UNSUPPORTED"|"FAILED";
 
 export type DiscoveredAttachment={
   url:string;
