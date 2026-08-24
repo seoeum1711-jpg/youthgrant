@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../cloudflare.ts";
 import { getSource } from "../collectors/registry.ts";
+import { findCrossSourceDuplicateCandidates, summarizePublicDataQuality, type DuplicateCandidate, type DuplicateCandidateRecord, type PublicDataQualitySummary } from "../domain/duplicate-candidates.ts";
 import type { Opportunity, Verification, ReviewStatus } from "../domain/types.ts";
 import { calculateOperationalHealth, summarizeEligibleDiscovery, type DiscoveryStateRow, type OperationalHealth } from "./source-health.ts";
 
@@ -14,6 +15,7 @@ type OpportunityRow={
 
 export type ReviewQueueItem={id:string;title:string;sourceId:string;sourceName:string;sourceUrl:string;reviewStatus:ReviewStatus;flag:string;reason:string;raw:string;tone:"warning"|"danger";attachmentSummary:string|null};
 export type ReviewDetail={opportunity:Opportunity;rawText:string};
+export type OpsReviewOverview={candidates:DuplicateCandidate[];quality:PublicDataQualitySummary};
 export type SourceMonitorItem={id:string;name:string;method:string;region:string;operationalHealth:OperationalHealth;implemented:boolean;enabled:boolean;lastRunAt:string|null;lastSuccessAt:string|null;consecutiveFailures:number;found:number|null;itemsNew:number|null;itemsUpdated:number|null;matched:number|null;analyzed:number|null;result:string|null;httpStatus:number|null;parserVersion:string|null;errorCode:string|null;error:string|null;attachmentsDiscovered:number|null;attachmentsFetchSuccess:number|null;attachmentsParseSuccess:number|null;attachmentsParseFailed:number|null;attachmentsOcrRequired:number|null;fieldsRecovered:number|null;discoveryPending:number;discoveryComplete:number;discoveryUnsupported:number;discoveryFailed:number};
 export type CrawlRunSummary={id:string;status:string;trigger:"MANUAL"|"AUTOMATION";startedAt:string;finishedAt:string|null;errorCount:number};
 
@@ -37,6 +39,14 @@ export async function listReviewQueue():Promise<ReviewQueueItem[]>{
   const reviewSelect=opportunitySelect.replace("SELECT o.*",`SELECT o.*,rn.raw_text,(SELECT COUNT(*) FROM attachments a WHERE a.raw_notice_id=rn.id) AS attachment_count,(SELECT COUNT(*) FROM attachments a WHERE a.raw_notice_id=rn.id AND a.parse_status IN ('PARSED','OCR_REQUIRED','PARSE_FAILED','UNSUPPORTED','HWP_PARSER_BLOCKED')) AS attachment_processed,(SELECT COUNT(*) FROM attachments a WHERE a.raw_notice_id=rn.id AND a.parse_status IN ('PARSE_FAILED','HWP_PARSER_BLOCKED')) AS attachment_failed`);
   const result=await db().prepare(`${reviewSelect} WHERE rn.relevance_status='IN_SCOPE' AND o.review_status IN ('PENDING','REVIEW_REQUIRED','DEFERRED') ORDER BY o.updated_at DESC LIMIT 100`).all<OpportunityRow&{raw_text:string;attachment_count:number;attachment_processed:number;attachment_failed:number}>();
   return result.results.map(row=>{const eligibility=row.eligibility_verification;const deferred=row.review_status==="DEFERRED";const needsAttachment=eligibility==="NEEDS_ATTACHMENT";const attachmentSummary=row.attachment_count?`첨부 ${row.attachment_count}개 · ${row.attachment_processed}개 분석 · ${row.attachment_failed}개 실패`:null;return{id:row.id,title:row.title,sourceId:row.source_id,sourceName:row.source_name,sourceUrl:row.source_url,reviewStatus:row.review_status,flag:deferred?"보류":needsAttachment?"첨부 확인":"검토 필요",reason:deferred?"운영자가 판단을 보류한 공고입니다.":needsAttachment?"신청자격이 첨부파일에 있어 자동 확정할 수 없습니다.":"신청자격 또는 신청 마감 근거가 충분하지 않아 운영자 검토가 필요합니다.",raw:row.eligibility_evidence??row.raw_text,tone:needsAttachment?"danger":"warning",attachmentSummary};});
+}
+
+export async function getOpsReviewOverview():Promise<OpsReviewOverview>{
+  const result=await db().prepare(`${opportunitySelect.replace("SELECT o.*","SELECT o.*,rn.relevance_status")} WHERE rn.relevance_status='IN_SCOPE' AND o.review_status<>'EXCLUDED' ORDER BY o.updated_at DESC LIMIT 200`).all<OpportunityRow&{relevance_status:"IN_SCOPE"}>();
+  const records:DuplicateCandidateRecord[]=result.results.map(row=>({id:row.id,title:row.title,organization:row.organization,sourceId:row.source_id,sourceName:row.source_name,sourceUrl:row.source_url,publishedAt:row.published_at,collectedAt:row.collected_at,deadline:row.deadline,deadlineVerification:row.deadline_verification,eligibilityVerification:row.eligibility_verification,relevanceStatus:row.relevance_status,reviewStatus:row.review_status}));
+  const candidates=findCrossSourceDuplicateCandidates(records);const publicIds=new Set(records.filter(record=>record.reviewStatus!=="PENDING").map(record=>record.id));
+  const publicCandidatePairs=candidates.filter(candidate=>publicIds.has(candidate.left.id)&&publicIds.has(candidate.right.id)).length;
+  return{candidates,quality:summarizePublicDataQuality(records,publicCandidatePairs)};
 }
 
 export async function listSourceMonitor():Promise<SourceMonitorItem[]>{
