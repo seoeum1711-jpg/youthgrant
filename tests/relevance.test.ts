@@ -19,6 +19,20 @@ test("financial support plus institution delivery is IN_SCOPE",()=>{
   for(const [title,body] of cases)assert.equal(classify(title,body).status,"IN_SCOPE",title);
 });
 
+test("V2 Phase 1.1 guards participant groups and requires institution-used MATERIAL evidence",()=>{
+  const patrol=classify("2026년 제5기 서울 대학생 순찰대 추가 모집 연장 공고","모집대상은 서울 소재 대학교 내 구성된 학생회, 동아리 등 단체입니다. 선정된 순찰대는 캠퍼스 순찰에 참여하며 순찰장비를 지급받습니다.");
+  assert.equal(patrol.status,"OUT_OF_SCOPE");assert.deepEqual(patrol.supportTypes,[]);
+
+  const legal=classify("2026년 청소년활동 안전법률상담 지원사업 안내","신청대상은 청소년시설입니다. 지원사업 홍보 포스터와 안내문을 첨부합니다. 청소년활동 중 발생한 시설운영 분쟁에 대해 전문 변호사가 시설을 방문하여 법률상담을 제공합니다.");
+  assert.equal(legal.status,"IN_SCOPE");assert.deepEqual(legal.supportTypes,["PROFESSIONAL_SERVICE"]);
+
+  const safetyMaterial=classify("청소년수련시설 안전물품 지원","신청대상은 전국 청소년수련시설입니다. 선정 시설에 자동심장충격기와 안전물품을 보급하여 시설 안전 운영에 활용합니다.");
+  assert.equal(safetyMaterial.status,"IN_SCOPE");assert.deepEqual(safetyMaterial.supportTypes,["MATERIAL"]);assert.ok(safetyMaterial.supportEvidence.MATERIAL?.length);
+
+  const participantEquipment=classify("청소년 동아리 활동팀 모집","모집대상은 학생 동아리와 개인 구성 팀입니다. 참가팀은 지역 캠페인 활동에 참여하며 활동장비와 기념물품을 지급받습니다.");
+  assert.equal(participantEquipment.status,"OUT_OF_SCOPE");assert.deepEqual(participantEquipment.supportTypes,[]);
+});
+
 test("known participant, education, event and cooperation noise is OUT_OF_SCOPE",()=>{
   const cases=[
     ["청소년 디지털 성평등 교육 참가기관 추가 모집","교육 참여를 희망하는 학교와 청소년기관을 모집합니다. 참가 기관은 무료 강의 영상을 시청합니다."],

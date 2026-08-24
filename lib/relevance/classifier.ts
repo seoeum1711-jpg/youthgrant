@@ -23,6 +23,8 @@ const ORGANIZATION_APPLICANT=[
   /(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|학교|기관|시설|단체|법인|센터)[^\n.]{0,100}(?:신청|지원할 수|공모에 참여)/,
 ] as const;
 const PERSONAL_APPLICANT=/(?:신청|모집|참가|참여)\s*(?:대상|자격|주체)?[^\n.]{0,80}(?:개인|청소년\s*개인|참가자|교육생|종사자|시민|동아리|학생|지도자)|(?:개인|청소년\s*개인|참가자|교육생|종사자|시민|동아리|학생|지도자)[^\n.]{0,60}(?:신청|모집|참가|참여)/;
+const PARTICIPANT_GROUP_APPLICANT=/(?:신청|모집|지원)\s*(?:대상|자격|주체)?\s*[:：]?\s*[^\n.!?]{0,80}(?:학생회|(?:학생|대학|청소년)\s*동아리|개인(?:들로)?\s*구성(?:된)?\s*팀|참가팀|활동팀)|(?:학생회|(?:학생|대학|청소년)\s*동아리|개인(?:들로)?\s*구성(?:된)?\s*팀|참가팀|활동팀)[^\n.!?]{0,60}(?:신청|모집|지원)/;
+const INSTITUTIONAL_APPLICANT=/(?:신청|모집|지원)\s*(?:대상|자격|주체)?\s*[:：]?\s*[^\n.!?]{0,100}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|복지기관|법인)/;
 const PRIZE_CONTEST=/(?:공모전|작품\s*모집|우수\s*사례|사례\s*공모|수기\s*공모)[^\n.]{0,180}(?:시상금|상금|부상)|(?:시상금|상금|부상)[^\n.]{0,180}(?:공모전|작품|사례|수기)/;
 const STRONG_OUT_SIGNALS:[RegExp,string][]=[
   [/(?:참가자|참가\s*청소년|참여자|교육생|수강생)\s*(?:을\s*)?모집/,"개인·참가자 모집"],
@@ -48,8 +50,12 @@ const STAFF=[
   /(?:파견|방문|배치|지원|제공)[^\n.]{0,100}(?:전문\s*)?(?:강사|멘토|상담사|전문가|지도자|운영인력)/,
 ] as const;
 const MATERIAL=[
-  /(?:교구|장비|키트|교육\s*자료|안전\s*물품|물품|멀티탭|포스터|자동심장충격기|AED|패드|배터리|매뉴얼|구독권|프로그램\s*재료|간식\s*쿠폰)[^\n.]{0,100}(?:제공|보급|지원|배정|지급|배송)/i,
-  /(?:제공|보급|지원|배정|지급|배송)[^\n.]{0,100}(?:교구|장비|키트|교육\s*자료|안전\s*물품|물품|멀티탭|포스터|자동심장충격기|AED|패드|배터리|매뉴얼|구독권|프로그램\s*재료|간식\s*쿠폰)/i,
+  /(?:교구|장비|키트|교육\s*자료|안전\s*물품|물품|멀티탭|자동심장충격기|AED|패드|배터리|매뉴얼|구독권|프로그램\s*재료|간식\s*쿠폰)[^\n.!?]{0,40}(?:제공|보급|지원|배정|지급|배송)/i,
+  /(?:제공|보급|지원|배정|지급|배송)[^\n.!?]{0,40}(?:교구|장비|키트|교육\s*자료|안전\s*물품|물품|멀티탭|자동심장충격기|AED|패드|배터리|매뉴얼|구독권|프로그램\s*재료|간식\s*쿠폰)/i,
+] as const;
+const MATERIAL_INSTITUTION_USE=[
+  /(?:선정|신청|지원|수요\s*조사\s*응답)?\s*(?:기관|시설|학교|센터|쉼터)[^\n.!?]{0,100}(?:교구|장비|키트|교육\s*자료|안전\s*물품|물품|멀티탭|자동심장충격기|AED|패드|배터리|매뉴얼|구독권|프로그램\s*재료)[^\n.!?]{0,40}(?:제공|보급|지원|배정|지급|배송)/i,
+  /(?:교구|장비|키트|교육\s*자료|안전\s*물품|물품|멀티탭|자동심장충격기|AED|패드|배터리|매뉴얼|구독권|프로그램\s*재료)[^\n.!?]{0,80}(?:기관|시설|학교|센터|쉼터)(?:에|에게|의\s*프로그램)[^\n.!?]{0,40}(?:제공|보급|지원|배정|지급|배송|활용|운영)/i,
 ] as const;
 const PROGRAM=[
   /(?:완성된|우수|맞춤형|방문형|보급형|디지털\s*시민성\s*기반|지역형)?\s*(?:교육\s*)?프로그램[^\n.]{0,120}(?:무상\s*)?(?:보급|제공|도입|방문\s*운영|운영\s*지원)/,
@@ -70,15 +76,16 @@ function addEvidence(target:Partial<Record<ExternalResourceTypeValue,string[]>>,
 
 export function classifyOpportunityRelevance(input:RelevanceInput):RelevanceDecision{
   const title=clean(input.title);const body=clean(input.body);const attachments=clean(input.attachmentText?.join(" "));const evidence=clean(`${body} ${attachments}`);const material=bodyIsMaterial(title,body)||attachments.length>=30;const combined=clean(`${title} ${evidence}`);
-  const financial=firstMatch(combined,FINANCIAL);const execution=firstMatch(combined,EXECUTION);const applicant=firstMatch(combined,ORGANIZATION_APPLICANT);const personal=combined.match(PERSONAL_APPLICANT)?.[0]??null;
+  const financial=firstMatch(combined,FINANCIAL);const execution=firstMatch(combined,EXECUTION);const applicant=firstMatch(combined,ORGANIZATION_APPLICANT);const personal=combined.match(PERSONAL_APPLICANT)?.[0]??null;const participantGroup=clean(combined.match(PARTICIPANT_GROUP_APPLICANT)?.[0]);const institutionalApplicant=clean(combined.match(INSTITUTIONAL_APPLICANT)?.[0]);
   if(!material)return decision(RelevanceStatus.RELEVANCE_REVIEW,"상세 본문 또는 첨부 근거가 충분하지 않아 공모사업 해당 여부를 자동 확정할 수 없음",[]);
   if(PRIZE_CONTEST.test(combined))return decision(RelevanceStatus.OUT_OF_SCOPE,"외부자원 지원사업이 아니라 시상금·상금 중심 공모전으로 확인",["시상금·상금 중심 공모전"]);
+  if(participantGroup&&!institutionalApplicant&&!execution)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 사업수행 주체가 아니라 학생회·동아리·참가팀 신청으로 확인: ${participantGroup}`,[participantGroup]);
   if(personal&&!applicant)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 활용형 지원이 아니라 개인·동아리 참여 모집으로 확인: ${clean(personal)}`,[clean(personal)]);
   for(const [pattern,label] of STRONG_OUT_SIGNALS){const match=combined.match(pattern);if(match)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 외부자원 지원이 아니라 ${label}으로 확인: ${clean(match[0])}`,[clean(match[0])]);}
-  const supportEvidence=emptyEvidence();const staff=firstMatch(combined,STAFF);const suppliedMaterial=firstMatch(combined,MATERIAL);const suppliedProgram=firstMatch(combined,PROGRAM);const professionalService=firstMatch(combined,PROFESSIONAL_SERVICE);const institutionUse=clean(combined.match(INSTITUTION_USE)?.[0]);
+  const supportEvidence=emptyEvidence();const staff=firstMatch(combined,STAFF);const suppliedMaterial=firstMatch(combined,MATERIAL);const materialInstitutionUse=firstMatch(combined,MATERIAL_INSTITUTION_USE);const suppliedProgram=firstMatch(combined,PROGRAM);const professionalService=firstMatch(combined,PROFESSIONAL_SERVICE);const institutionUse=clean(combined.match(INSTITUTION_USE)?.[0]);
   if(financial&&execution)addEvidence(supportEvidence,ExternalResourceType.MONEY,financial,execution);
   if(staff&&institutionUse)addEvidence(supportEvidence,ExternalResourceType.STAFF,staff,institutionUse);
-  if(suppliedMaterial)addEvidence(supportEvidence,ExternalResourceType.MATERIAL,suppliedMaterial);
+  if(suppliedMaterial&&materialInstitutionUse)addEvidence(supportEvidence,ExternalResourceType.MATERIAL,suppliedMaterial,materialInstitutionUse);
   if(suppliedProgram&&institutionUse)addEvidence(supportEvidence,ExternalResourceType.PROGRAM,suppliedProgram,institutionUse);
   if(professionalService)addEvidence(supportEvidence,ExternalResourceType.PROFESSIONAL_SERVICE,professionalService);
   const supportTypes=Object.keys(supportEvidence) as ExternalResourceTypeValue[];
