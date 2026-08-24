@@ -27,7 +27,7 @@ const worker={
     }
     if(url.pathname==="/api/ops/collect"){
       if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405,headers:{allow:"POST"}});
-      try{const result=await runCollectionToD1(env.DB,betaCollectors(env),"MANUAL",{queue:env.ATTACHMENT_QUEUE});return Response.json(result);}
+      try{const result=await runCollectionToD1(env.DB,betaCollectors(env),"MANUAL",{queue:env.ATTACHMENT_QUEUE,telegram:{environment:env.ENVIRONMENT,siteOrigin:env.SITE_ORIGIN,botToken:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID}});return Response.json(result);}
       catch(error){if(error instanceof CollectionLockedError)return Response.json({error:error.message},{status:423});throw error;}
     }
     const reviewMatch=url.pathname.match(/^\/api\/ops\/review\/([^/]+)$/);
@@ -40,7 +40,7 @@ const worker={
     return handler.fetch(request,env,ctx);
   },
   async scheduled(_controller:ScheduledControllerLike,env:YouthGrantEnv){
-    try{await runCollectionToD1(env.DB,betaCollectors(env),"AUTOMATION",{queue:env.ATTACHMENT_QUEUE});}
+    try{await runCollectionToD1(env.DB,betaCollectors(env),"AUTOMATION",{queue:env.ATTACHMENT_QUEUE,telegram:{environment:env.ENVIRONMENT,siteOrigin:env.SITE_ORIGIN,botToken:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID}});}
     catch(error){if(error instanceof CollectionLockedError)return;throw error;}
   },
   async queue(batch:QueueBatchLike<AttachmentQueueMessage>,env:YouthGrantEnv){for(const message of batch.messages){try{await processAttachmentMessage(env,message.body);message.ack();}catch{message.retry({delaySeconds:60});}}},

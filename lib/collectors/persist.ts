@@ -9,6 +9,7 @@ import { discoverAndQueueAttachments } from "../attachments/discovery.ts";
 import { assessNoticeRelevance } from "../relevance/gate.ts";
 import type { RelevanceDecision } from "../relevance/classifier.ts";
 import { classifySourceFailure } from "./fetch-policy.ts";
+import { notifyOwnerOfNewOpportunity, type TelegramNotificationConfig, type TelegramNotificationDependencies } from "../notifications/telegram.ts";
 
 export type CollectionTrigger="MANUAL"|"AUTOMATION";
 
@@ -59,11 +60,13 @@ async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDef
       .bind(rawId,source.id,sourceRunId,notice.sourceNoticeId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.dedupeKey,notice.collectedAt,relevance.status,relevance.reason,notice.collectedAt).run();
   }
   const rawNoticeId=existing?.id??rawId;
+  let opportunityCreated=false;
   if(!preserveManual&&relevance.status==="IN_SCOPE"){
-    await db.prepare(`INSERT OR IGNORE INTO opportunities
+    const opportunityInsert=await db.prepare(`INSERT OR IGNORE INTO opportunities
       (id,dedupe_key,title,organization,region,field,facility_types_json,application_start,deadline,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),null,null,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.REVIEW_REQUIRED,notice.publishedAt,notice.collectedAt).run();
+    opportunityCreated=changes(opportunityInsert)>0;
     await db.prepare("INSERT OR IGNORE INTO opportunity_sources (opportunity_id,raw_notice_id,is_primary,created_at) VALUES (?,?,1,?)").bind(existing?.opportunity_id??opportunityId,rawNoticeId,notice.collectedAt).run();
     if(existing?.opportunity_id&&existing.review_status===ReviewStatus.PENDING)await db.prepare("UPDATE opportunities SET review_status='REVIEW_REQUIRED',updated_at=? WHERE id=?").bind(notice.collectedAt,existing.opportunity_id).run();
   }else if(!preserveManual&&existing?.opportunity_id&&relevance.status==="OUT_OF_SCOPE"){
@@ -71,10 +74,10 @@ async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDef
   }else if(!preserveManual&&existing?.opportunity_id&&relevance.status==="RELEVANCE_REVIEW"){
     await db.prepare("UPDATE opportunities SET review_status='PENDING',updated_at=? WHERE id=?").bind(notice.collectedAt,existing.opportunity_id).run();
   }
-  return{state:existing?"MATCHED" as const:"NEW" as const,rawNoticeId,relevanceStatus:preserveManual?existing?.relevance_status??"IN_SCOPE":relevance.status};
+  return{state:existing?"MATCHED" as const:"NEW" as const,rawNoticeId,opportunityId:opportunityCreated?opportunityId:undefined,opportunityCreated,relevanceStatus:preserveManual?"IN_SCOPE" as const:relevance.status};
 }
 
-export type AttachmentDiscoveryDependencies={queue?:QueueLike<AttachmentQueueMessage>;fetcher?:typeof fetch};
+export type AttachmentDiscoveryDependencies={queue?:QueueLike<AttachmentQueueMessage>;fetcher?:typeof fetch;telegram?:TelegramNotificationConfig;telegramDependencies?:TelegramNotificationDependencies};
 
 async function runSource(db:D1DatabaseLike,crawlRunId:string,collector:Collector,attachments?:AttachmentDiscoveryDependencies):Promise<SourceRunResult>{
   const sourceRunId=crypto.randomUUID();const startedAt=iso();const parserVersion=collector.parserVersion??"v3-unknown";
@@ -83,7 +86,7 @@ async function runSource(db:D1DatabaseLike,crawlRunId:string,collector:Collector
     VALUES (?,?,?,'RUNNING',?,0,0,0,NULL,0,0,0,0,0,'RUNNING',NULL,?,NULL,NULL)`).bind(sourceRunId,crawlRunId,collector.source.id,startedAt,parserVersion).run();
   try{
     const raw=await collector.collect();const notices=dedupeNotices(raw);let itemsNew=0;let itemsUpdated=0;let itemsMatched=0;
-    for(const notice of notices){const relevance=await assessNoticeRelevance(notice,attachments?.fetcher);const persisted=await persistNotice(db,notice,collector.source,sourceRunId,relevance);if(persisted.state==="NEW")itemsNew++;else{itemsUpdated++;itemsMatched++;}if(attachments&&persisted.relevanceStatus==="IN_SCOPE")await discoverAndQueueAttachments(db,attachments.queue,collector.source,notice,persisted.rawNoticeId,sourceRunId,attachments.fetcher).catch(()=>undefined);}
+    for(const notice of notices){const relevance=await assessNoticeRelevance(notice,attachments?.fetcher);const persisted=await persistNotice(db,notice,collector.source,sourceRunId,relevance);if(persisted.state==="NEW")itemsNew++;else{itemsUpdated++;itemsMatched++;}if(attachments?.telegram)await notifyOwnerOfNewOpportunity({state:persisted.state,relevanceStatus:persisted.relevanceStatus,opportunityCreated:persisted.opportunityCreated,opportunityId:persisted.opportunityId,title:notice.title,organization:collector.source.name,deadline:null,eligibleRegion:null,reviewReason:relevance.reason},attachments.telegram,attachments.telegramDependencies);if(attachments&&persisted.relevanceStatus==="IN_SCOPE")await discoverAndQueueAttachments(db,attachments.queue,collector.source,notice,persisted.rawNoticeId,sourceRunId,attachments.fetcher).catch(()=>undefined);}
     const finishedAt=iso();const httpStatus=collector.lastHttpStatus??null;
     const result=raw.length?"SUCCESS_WITH_ITEMS" as const:"SUCCESS_NO_ITEMS" as const;
     await db.prepare(`UPDATE source_runs SET status='SUCCESS',finished_at=?,found=?,inserted=?,matched=?,items_found=?,items_new=?,items_updated=?,items_matched=?,items_analyzed=?,result=?,http_status=?,parser_version=?,error=NULL,error_code=NULL,error_message=NULL WHERE id=?`)

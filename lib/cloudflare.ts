@@ -34,4 +34,6 @@ export type YouthGrantEnv = {
   RESEND_API_KEY?: string;
   CONTACT_FROM_EMAIL?: string;
   CONTACT_RATE_LIMIT?: RateLimiterLike;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_CHAT_ID?: string;
 };
