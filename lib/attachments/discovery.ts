@@ -7,7 +7,14 @@ import { extensionOf } from "./file-type.ts";
 const SUPPORTED=/\.(pdf|hwpx|hwp|zip|jpe?g|png)(?:$|[?#])/i;
 const DOWNLOAD_HINT=/(download(?:BbsFile|ContentsFile)?\.do|atchmnflNo=|fileNo=)/i;
 function decode(value:string){return value.replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/\s+/g," ").trim();}
-function absolute(base:string,href:string){try{return new URL(href.replace(/&amp;/g,"&"),base).toString();}catch{return null;}}
+function absolute(base:string,href:string){try{const url=new URL(href.replace(/&amp;/g,"&"),base);return url.protocol==="http:"||url.protocol==="https:"?url.toString():null;}catch{return null;}}
+function attachmentUrl(source:SourceDefinition,noticeUrl:string,href:string){
+  if(source.id==="ggyouth"){
+    const download=href.match(/^javascript:\s*fn_egov_downFile\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)\s*;?$/i);
+    if(download)return absolute(noticeUrl,`/cmm/fms/FileDown.do?atchFileId=${encodeURIComponent(download[1])}&fileSn=${encodeURIComponent(download[2])}`);
+  }
+  return absolute(noticeUrl,href);
+}
 export function classifyDocumentRole(filename:string):{role:DocumentRole;priority:number}{
   if(/\.(jpe?g|png)$/i.test(filename))return{role:"MEDIA",priority:10};
   if(/(신청서|지원신청서|제안서|사업계획서|양식|서식|동의서)/.test(filename))return{role:"FORM",priority:40};
@@ -17,11 +24,16 @@ export function classifyDocumentRole(filename:string):{role:DocumentRole;priorit
 }
 function filenameFrom(text:string,url:string){const textMatch=text.match(/([^/<>]{1,180}\.(?:pdf|hwpx|hwp|zip|jpe?g|png))/i);if(textMatch)return textMatch[1].trim();try{const path=decodeURIComponent(new URL(url).pathname);const last=path.split("/").pop()??"";if(SUPPORTED.test(last))return last;}catch{/**/}const uuid=url.match(/[?&]uuid=([^&]+)/i)?.[1];if(uuid)return decodeURIComponent(uuid);return text.slice(0,120)||"attachment";}
 function mime(extension:string|null){return extension==="pdf"?"application/pdf":extension==="hwpx"?"application/vnd.hancom.hwpx":extension==="hwp"?"application/x-hwp":extension==="zip"?"application/zip":extension==="jpg"||extension==="jpeg"?"image/jpeg":extension==="png"?"image/png":null;}
-export function supportsAttachmentDiscovery(source:SourceDefinition,notice:RawNotice){return source.id==="gfgf"||source.id==="mpva"||/selectBbsNttView\.do|\/view\.do/.test(notice.url);}
+export function supportsAttachmentDiscovery(source:SourceDefinition,notice:RawNotice){
+  if(source.id==="gfgf"||source.id==="mpva")return true;
+  if(source.id==="kywa")return /\/pressinfo\/notice_view\.jsp(?:[?#]|$)/i.test(notice.url);
+  if(source.id==="ggyouth")return /\/07_openYard\/noticeView\.do(?:[?#]|$)/i.test(notice.url);
+  return/selectBbsNttView\.do|\/view\.do/.test(notice.url);
+}
 
 export async function discoverAttachments(source:SourceDefinition,notice:RawNotice,fetcher:typeof fetch=globalThis.fetch.bind(globalThis)):Promise<DiscoveredAttachment[]>{
   if(!supportsAttachmentDiscovery(source,notice))return[];const response=await fetchWithPolicy(notice.url,{headers:{"user-agent":"YouthGrant-Public-Beta/3.0 (+https://youthgrant.seoeum1711.workers.dev)"}},{fetcher});const contentType=response.headers.get("content-type")??"";if(contentType&&!/html|text/.test(contentType))return[];const html=await response.text();const found=new Map<string,DiscoveredAttachment>();
-  for(const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){const href=match[1];const text=decode(match[2]);if(/^미리보기\s*$/i.test(text)||(!SUPPORTED.test(href)&&!SUPPORTED.test(text)&&!DOWNLOAD_HINT.test(href)))continue;const url=absolute(notice.url,href);if(!url||/\/images\/wa\/|wa_certificate/i.test(url))continue;const filename=filenameFrom(text,url);const extension=extensionOf(filename);if(!extension&&!DOWNLOAD_HINT.test(url))continue;const classified=classifyDocumentRole(filename);found.set(url,{url,filename,extension,mimeType:mime(extension),...classified});}
+  for(const match of html.matchAll(/<a\b[^>]*href=(["'])([\s\S]*?)\1[^>]*>([\s\S]*?)<\/a>/gi)){const href=match[2];const text=decode(match[3]);if(/^미리보기\s*$/i.test(text)||(!SUPPORTED.test(href)&&!SUPPORTED.test(text)&&!DOWNLOAD_HINT.test(href)))continue;const url=attachmentUrl(source,notice.url,href);if(!url||/\/images\/wa\/|wa_certificate/i.test(url))continue;const filename=filenameFrom(text,url);const extension=extensionOf(filename);if(!extension&&!DOWNLOAD_HINT.test(url))continue;const classified=classifyDocumentRole(filename);found.set(url,{url,filename,extension,mimeType:mime(extension),...classified});}
   return[...found.values()].sort((a,b)=>b.priority-a.priority);
 }
 
