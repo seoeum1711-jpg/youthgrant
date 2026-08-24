@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GrantViewModel } from "../../lib/domain/types.ts";
 import { categoryTaxonomy, facilityTaxonomy } from "../../lib/domain/grant-view-model.ts";
-import { emptyExplorerFilters, explorerRegions, explorerStatuses, matchesExplorerFilters, parseExplorerQuery, serializeExplorerQuery, type ExplorerFilterState } from "../../lib/domain/explorer-filter.ts";
+import { emptyExplorerFilters, explorerEmptyState, explorerRegions, explorerStatuses, matchesExplorerFilters, parseExplorerQuery, serializeExplorerQuery, sortExplorerGrants, type ExplorerFilterState, type ExplorerSort } from "../../lib/domain/explorer-filter.ts";
 import { useSavedGrantIds } from "./saved-grants.tsx";
 
 const regions=[...explorerRegions];
@@ -11,28 +11,31 @@ const facilities=[...facilityTaxonomy];
 const categories=[...categoryTaxonomy];
 const statuses=[...explorerStatuses];
 
-export function ExplorerClient({grants}:{grants:GrantViewModel[]}){
-  const [filters,setFilters]=useState<ExplorerFilterState>(emptyExplorerFilters);const [sheet,setSheet]=useState(false);const [ready,setReady]=useState(false);const{savedIds,toggle}=useSavedGrantIds();
+export function ExplorerClient({grants,activeSourceCount}:{grants:GrantViewModel[];activeSourceCount:number}){
+  const [filters,setFilters]=useState<ExplorerFilterState>(emptyExplorerFilters);const [sort,setSort]=useState<ExplorerSort>("deadline");const [sheet,setSheet]=useState(false);const [ready,setReady]=useState(false);const{savedIds,toggle}=useSavedGrantIds();const filterTriggerRef=useRef<HTMLButtonElement>(null);const filterCloseRef=useRef<HTMLButtonElement>(null);
   useEffect(()=>{const sync=()=>setFilters(parseExplorerQuery(window.location.search));const timeout=window.setTimeout(()=>{sync();setReady(true);},0);window.addEventListener("popstate",sync);return()=>{window.clearTimeout(timeout);window.removeEventListener("popstate",sync);};},[]);
   useEffect(()=>{if(!ready)return;const query=serializeExplorerQuery(filters);const next=query?`/?${query}`:"/";if(`${window.location.pathname}${window.location.search}`!==next)history.pushState(null,"",next);},[filters,ready]);
   const setSearch=(search:string)=>setFilters(old=>({...old,search}));const setRegion=(region:string)=>setFilters(old=>({...old,region}));
   const toggleFilter=useCallback((key:"facility"|"category"|"status",value:string)=>setFilters(old=>({...old,[key]:old[key].includes(value)?old[key].filter(item=>item!==value):[...old[key],value]})),[]);
-  const visible=useMemo(()=>grants.filter(grant=>matchesExplorerFilters(grant,filters)),[grants,filters]);
+  const filtered=useMemo(()=>grants.filter(grant=>matchesExplorerFilters(grant,filters)),[grants,filters]);
+  const visible=useMemo(()=>sortExplorerGrants(filtered,sort),[filtered,sort]);
   const count=(kind:"region"|"facility"|"category"|"status",value:string)=>grants.filter(grant=>kind==="region"?(value==="전체"||grant.eligibleRegion===value||(value!=="전국"&&value!=="확인 필요"&&grant.eligibleRegion==="전국")):kind==="facility"?grant.facilityTypes.includes(value):kind==="category"?grant.field===value:grant.status===value).length;
-  const reset=()=>setFilters(emptyExplorerFilters);const chips=[...(filters.search?[`검색: ${filters.search}`]:[]),...(filters.region!=="전체"?[filters.region]:[]),...filters.facility,...filters.category,...filters.status];
+  const closeSheet=useCallback(()=>{setSheet(false);requestAnimationFrame(()=>filterTriggerRef.current?.focus());},[]);
+  useEffect(()=>{if(!sheet)return;const previous=document.body.style.overflow;document.body.style.overflow="hidden";filterCloseRef.current?.focus();const keydown=(event:KeyboardEvent)=>{if(event.key==="Escape")closeSheet();};document.addEventListener("keydown",keydown);return()=>{document.body.style.overflow=previous;document.removeEventListener("keydown",keydown);};},[sheet,closeSheet]);
+  const reset=()=>setFilters(emptyExplorerFilters);const chips=[...(filters.search?[`검색: ${filters.search}`]:[]),...(filters.region!=="전체"?[filters.region]:[]),...filters.facility,...filters.category,...filters.status];const zero=explorerEmptyState(activeSourceCount);
   const removeChip=(chip:string)=>{if(chip.startsWith("검색: "))setSearch("");else if(chip===filters.region)setRegion("전체");else if(filters.facility.includes(chip))toggleFilter("facility",chip);else if(filters.category.includes(chip))toggleFilter("category",chip);else toggleFilter("status",chip);};
   return <>
-    <div className="mobile-filterbar"><button onClick={()=>setSheet(true)}>필터 {chips.length?`${chips.length}개 적용`:"선택"} ▾</button><span>검토할 공고 <b>{visible.length}</b>건</span></div>
+    <div className="mobile-filterbar"><button ref={filterTriggerRef} type="button" aria-expanded={sheet} aria-controls="mobile-filter-sheet" onClick={()=>setSheet(true)}>필터 {chips.length?`${chips.length}개 적용`:"선택"} ▾</button><span>지원사업 공고 <b>{visible.length}</b>건</span></div>
     <div className="explorer-shell">
       <aside className="filters" aria-label="공고 필터"><SearchField value={filters.search} onChange={setSearch}/><FilterControls filters={filters} setRegion={setRegion} toggle={toggleFilter} count={count}/><button className="reset" type="button" onClick={reset}>검색·필터 초기화</button></aside>
       <main className="results" id="grants">
-        <div className="result-bar"><h2 aria-live="polite">검토할 만한 공고 <strong>{visible.length}</strong>건</h2><div className="sort" aria-label="정렬"><button className="active">마감 임박순</button><button>최신순</button></div></div>
+        <div className="result-bar"><h2 aria-live="polite">지원사업 공고 <strong>{visible.length}</strong>건</h2><div className="sort" aria-label="정렬"><button type="button" className={sort==="deadline"?"active":undefined} aria-pressed={sort==="deadline"} onClick={()=>setSort("deadline")}>마감 임박순</button><button type="button" className={sort==="recent"?"active":undefined} aria-pressed={sort==="recent"} onClick={()=>setSort("recent")}>최근 수집순</button></div></div>
         <div className="desktop-search"><SearchField value={filters.search} onChange={setSearch}/></div>
         <div className="selected-chips" aria-label="선택된 검색과 필터">{chips.length?chips.map((chip,index)=><button key={`${chip}-${index}`} onClick={()=>removeChip(chip)}>{chip}<b>×</b></button>):<span>전체</span>}</div>
-        {visible.length?<div className="grant-list">{visible.map(grant=><GrantCard grant={grant} saved={savedIds.includes(grant.id)} onSave={()=>toggle(grant.id)} key={grant.id}/>)}</div>:grants.length===0?<div className="empty-state"><h3>현재 확인된 지원사업형 공고가 없습니다.</h3><p>일부 공식 기관을 대상으로 베타 수집 중입니다. 새로운 공고의 신청 주체와 재정지원 근거가 확인되면 이곳에 표시합니다.</p></div>:<div className="empty-state"><h3>검색 조건에 맞는 공고가 없습니다.</h3><p>검색어나 필터를 지우면 검토 가능한 공고 {grants.length}건을 볼 수 있습니다.</p><button onClick={reset}>전체 공고 보기</button></div>}
+        {visible.length?<div className="grant-list">{visible.map(grant=><GrantCard grant={grant} saved={savedIds.includes(grant.id)} onSave={()=>toggle(grant.id)} key={grant.id}/>)}</div>:grants.length===0?<div className="empty-state"><h3>{zero.heading}</h3><p>{zero.body}</p><a className="empty-principle-link" href="#principles">데이터 원칙 보기</a></div>:<div className="empty-state"><h3>검색 조건에 맞는 공고가 없습니다.</h3><p>검색어나 필터를 지우면 공개 공고 {grants.length}건을 볼 수 있습니다.</p><button onClick={reset}>전체 공고 보기</button></div>}
       </main>
     </div>
-    {sheet&&<div className="sheet-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setSheet(false)}}><section className="filter-sheet" role="dialog" aria-modal="true" aria-label="모바일 공고 필터"><div className="sheet-handle"/><div className="sheet-head"><h2>공고 검색·필터</h2><button aria-label="필터 닫기" onClick={()=>setSheet(false)}>×</button></div><SearchField value={filters.search} onChange={setSearch}/><FilterControls filters={filters} setRegion={setRegion} toggle={toggleFilter} count={count}/><button className="sheet-apply" onClick={()=>setSheet(false)}>공고 {visible.length}건 보기</button></section></div>}
+    {sheet&&<div className="sheet-backdrop" role="presentation" onClick={event=>{if(event.target===event.currentTarget)closeSheet();}}><section id="mobile-filter-sheet" className="filter-sheet" role="dialog" aria-modal="true" aria-label="모바일 공고 필터"><div className="sheet-handle"/><div className="sheet-head"><h2>공고 검색·필터</h2><button ref={filterCloseRef} type="button" aria-label="필터 닫기" onClick={closeSheet}>×</button></div><SearchField value={filters.search} onChange={setSearch}/><FilterControls filters={filters} setRegion={setRegion} toggle={toggleFilter} count={count}/><button type="button" className="sheet-apply" onClick={closeSheet}>공고 {visible.length}건 보기</button></section></div>}
   </>;
 }
 

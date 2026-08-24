@@ -23,3 +23,7 @@ export const sourceRegistry:SourceDefinition[]=[
 ];
 
 export function getSource(id:string){return sourceRegistry.find(source=>source.id===id);}
+
+type ActiveSourceFlags=Pick<SourceDefinition,"implemented"|"enabled">;
+export function isActiveSource(source:ActiveSourceFlags){return source.implemented&&source.enabled;}
+export function countActiveSources(sources:readonly ActiveSourceFlags[]=sourceRegistry){return sources.filter(isActiveSource).length;}
