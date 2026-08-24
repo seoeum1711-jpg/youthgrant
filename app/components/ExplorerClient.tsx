@@ -6,10 +6,10 @@ import { categoryTaxonomy, facilityTaxonomy } from "../../lib/domain/grant-view-
 import { emptyExplorerFilters, explorerEmptyState, explorerRegions, explorerStatuses, matchesExplorerFilters, parseExplorerQuery, serializeExplorerQuery, sortExplorerGrants, type ExplorerFilterState, type ExplorerSort } from "../../lib/domain/explorer-filter.ts";
 import { useSavedGrantIds } from "./saved-grants.tsx";
 
-const regions=[...explorerRegions];
-const facilities=[...facilityTaxonomy];
-const categories=[...categoryTaxonomy];
-const statuses=[...explorerStatuses];
+const regions=explorerRegions.filter(value=>value!=="확인 필요");
+const facilities=facilityTaxonomy.filter(value=>value!=="확인 필요");
+const categories=categoryTaxonomy.filter(value=>value!=="확인 필요");
+const statuses=explorerStatuses.filter(value=>value!=="일정 확인 필요");
 
 export function ExplorerClient({grants,activeSourceCount}:{grants:GrantViewModel[];activeSourceCount:number}){
   const [filters,setFilters]=useState<ExplorerFilterState>(emptyExplorerFilters);const [sort,setSort]=useState<ExplorerSort>("deadline");const [sheet,setSheet]=useState(false);const [ready,setReady]=useState(false);const{savedIds,toggle}=useSavedGrantIds();const filterTriggerRef=useRef<HTMLButtonElement>(null);const filterCloseRef=useRef<HTMLButtonElement>(null);
