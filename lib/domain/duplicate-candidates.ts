@@ -101,8 +101,9 @@ export function findCrossSourceDuplicateCandidates(records:DuplicateCandidateRec
 }
 
 export function summarizePublicDataQuality(records:DuplicateCandidateRecord[],duplicateCandidatePairs:number):PublicDataQualitySummary{
-  const publicRecords=records.filter(record=>record.relevanceStatus===RelevanceStatus.IN_SCOPE&&record.reviewStatus!==ReviewStatus.PENDING&&record.reviewStatus!==ReviewStatus.EXCLUDED);
+  const publicRecords=records.filter(record=>record.relevanceStatus===RelevanceStatus.IN_SCOPE&&(record.reviewStatus===ReviewStatus.PUBLISHED||record.reviewStatus===ReviewStatus.CONFIRMED));
+  const reviewNeeded=records.filter(record=>record.relevanceStatus===RelevanceStatus.IN_SCOPE&&(record.reviewStatus===ReviewStatus.REVIEW_REQUIRED||record.reviewStatus===ReviewStatus.DEFERRED)).length;
   const deadlineVerified=publicRecords.filter(record=>record.deadline!==null&&(record.deadlineVerification===Verification.VERIFIED||record.deadlineVerification===Verification.MANUAL_CONFIRMED)).length;
   const eligibilityVerified=publicRecords.filter(record=>record.eligibilityVerification===Verification.VERIFIED||record.eligibilityVerification===Verification.FROM_BODY||record.eligibilityVerification===Verification.MANUAL_CONFIRMED).length;
-  return{publicTotal:publicRecords.length,reviewNeeded:publicRecords.filter(record=>record.reviewStatus===ReviewStatus.REVIEW_REQUIRED||record.reviewStatus===ReviewStatus.DEFERRED).length,deadlineVerified,deadlineUnknown:publicRecords.length-deadlineVerified,eligibilityVerified,eligibilityUnknown:publicRecords.length-eligibilityVerified,duplicateCandidatePairs};
+  return{publicTotal:publicRecords.length,reviewNeeded,deadlineVerified,deadlineUnknown:publicRecords.length-deadlineVerified,eligibilityVerified,eligibilityUnknown:publicRecords.length-eligibilityVerified,duplicateCandidatePairs};
 }

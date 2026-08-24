@@ -5,6 +5,7 @@ import { classifyDocumentRole } from "./discovery.ts";
 import { detectAttachmentFormat, extensionOf } from "./file-type.ts";
 import { parseAttachmentBytes } from "./parsers.ts";
 import { applyAttachmentEvidence, extractAttachmentEvidence } from "./verification.ts";
+import { finalizeOpportunityVerification } from "../data/opportunity-finalization.ts";
 
 const MAX_ATTACHMENT_BYTES=10*1024*1024;
 const FINAL_STATUSES=new Set(["PARSED","OCR_REQUIRED","UNSUPPORTED","HWP_PARSER_BLOCKED"]);
@@ -26,6 +27,8 @@ type AttachmentRow={
   content_hash:string|null;
   archive_depth:number;
 };
+type AttachmentProcessingEnv=Pick<YouthGrantEnv,"DB"|"ENVIRONMENT"|"SITE_ORIGIN"|"TELEGRAM_BOT_TOKEN"|"TELEGRAM_CHAT_ID">;
+function finalizationOptions(env:AttachmentProcessingEnv,message:AttachmentQueueMessage){return{notifyNewOpportunity:Boolean(message.notifyOnFinalize),telegram:{environment:env.ENVIRONMENT,siteOrigin:env.SITE_ORIGIN,botToken:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID}};}
 
 export async function attachmentContentHash(bytes:Uint8Array){
   const digest=await crypto.subtle.digest("SHA-256",bytes.slice().buffer);
@@ -113,10 +116,10 @@ async function fail(db:D1DatabaseLike,row:AttachmentRow,error:unknown){
   if(row.parse_status!=="PARSE_FAILED")await metric(db,row.source_run_id,"attachments_parse_failed");
 }
 
-export async function processAttachmentMessage(env:Pick<YouthGrantEnv,"DB">,message:AttachmentQueueMessage,fetcher:typeof fetch=globalThis.fetch.bind(globalThis),force=false){
+export async function processAttachmentMessage(env:AttachmentProcessingEnv,message:AttachmentQueueMessage,fetcher:typeof fetch=globalThis.fetch.bind(globalThis),force=false){
   const row=await env.DB.prepare("SELECT * FROM attachments WHERE id=?").bind(message.attachmentId).first<AttachmentRow>();
   if(!row)return{status:"MISSING" as const};
-  if(!force&&row.content_hash&&FINAL_STATUSES.has(row.parse_status))return{status:"SKIPPED" as const};
+  if(!force&&row.content_hash&&FINAL_STATUSES.has(row.parse_status)){await finalizeOpportunityVerification(env.DB,row.raw_notice_id,finalizationOptions(env,message));return{status:"SKIPPED" as const};}
   try{
     const loaded=await loadBytes(row,fetcher);
     const detected=detectAttachmentFormat(loaded.bytes,loaded.filename,loaded.contentType);
@@ -143,9 +146,11 @@ export async function processAttachmentMessage(env:Pick<YouthGrantEnv,"DB">,mess
       await metric(env.DB,row.source_run_id,"fields_recovered",verification.recovered);
       await metric(env.DB,row.source_run_id,"fields_verified_by_attachment",verification.verified);
     }
+    await finalizeOpportunityVerification(env.DB,row.raw_notice_id,finalizationOptions(env,message));
     return{status:parsed.status,format:detected.format,evidence:allEvidence.length};
   }catch(error){
     await fail(env.DB,row,error);
+    await finalizeOpportunityVerification(env.DB,row.raw_notice_id,finalizationOptions(env,message));
     throw error;
   }
 }

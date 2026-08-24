@@ -32,7 +32,7 @@ export function parseReviewMutation(value:unknown):ReviewMutation{
 }
 
 export async function applyOpportunityReview(db:D1DatabaseLike,id:string,input:ReviewMutation){
-  const current=await db.prepare("SELECT id,deadline_evidence,deadline_evidence_location,eligibility_evidence,eligibility_evidence_location FROM opportunities WHERE id=?").bind(id).first<{id:string;deadline_evidence:string|null;deadline_evidence_location:string|null;eligibility_evidence:string|null;eligibility_evidence_location:string|null}>();if(!current)return false;
+  const current=await db.prepare("SELECT id,deadline_evidence,deadline_evidence_location,eligibility_evidence,eligibility_evidence_location FROM opportunities WHERE id=? AND review_status IN ('REVIEW_REQUIRED','DEFERRED')").bind(id).first<{id:string;deadline_evidence:string|null;deadline_evidence_location:string|null;eligibility_evidence:string|null;eligibility_evidence_location:string|null}>();if(!current)return false;
   const now=new Date().toISOString();const deadline=input.deadline.decision==="CONFIRMED"?input.deadline.value:null;const deadlineVerification=input.deadline.decision==="CONFIRMED"?Verification.MANUAL_CONFIRMED:Verification.UNKNOWN;
   const eligibilityVerification=input.eligibility.decision==="ELIGIBLE"?Verification.MANUAL_CONFIRMED:input.eligibility.decision==="INELIGIBLE"?Verification.MANUAL_REJECTED:Verification.UNKNOWN;
   const facilities=input.eligibility.facilityTypes?.length?input.eligibility.facilityTypes:["기타 / 확인 필요"];
