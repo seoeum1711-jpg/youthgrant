@@ -21,14 +21,14 @@ test("financial support plus institution delivery is IN_SCOPE",()=>{
 
 test("known participant, education, event and cooperation noise is OUT_OF_SCOPE",()=>{
   const cases=[
-    ["청소년 디지털 성평등 교육 참가기관 추가 모집","교육 참여를 희망하는 학교와 청소년기관을 모집합니다. 교육은 강사가 방문하여 무료로 진행합니다."],
+    ["청소년 디지털 성평등 교육 참가기관 추가 모집","교육 참여를 희망하는 학교와 청소년기관을 모집합니다. 참가 기관은 무료 강의 영상을 시청합니다."],
     ["청소년수련시설 협력강화사업 참가자 모집","청소년운영위원회 소속 청소년 참가자를 모집하며 교류 활동과 캠프에 참여합니다."],
     ["청소년수련시설 종사자 힐링 프로그램 참가자 모집","수련시설 종사자를 위한 힐링 프로그램 참가자 30명을 모집합니다."],
     ["청소년활동 프로그램 공모전 안내 및 참여 협조 요청","우수 프로그램과 활동 사례를 발굴하는 공모전이니 소속 기관에 참여 협조 요청드립니다."],
     ["청소년자원봉사활동 우수사례 공모전","청소년과 지도자, 운영기관의 우수 사례와 수기를 접수하고 수상작을 시상합니다."],
     ["학교단체 수련활동 상시 모집","국립청소년시설 수련활동에 참가할 학교단체의 예약 신청을 받습니다."],
     ["청소년 축제 참가 신청","시민과 청소년 개인을 대상으로 행사 참가 신청을 받으며 기념 물품을 제공합니다."],
-    ["청소년 프로그램 참여기관 모집","선정된 학교와 기관은 무료 체험 프로그램에 참여하며 강사와 교구를 제공받습니다."],
+    ["청소년 프로그램 참여기관 모집","학교와 기관은 무료 체험 프로그램에 참가하며 일정과 이용 방법을 안내받습니다."],
   ];
   for(const [title,body] of cases)assert.equal(classify(title,body).status,"OUT_OF_SCOPE",title);
 });
@@ -61,10 +61,10 @@ test("gate reads detail HTML before excluding participant recruitment",async()=>
   assert.equal((await assessNoticeRelevance(notice,source(),fetcher)).status,"OUT_OF_SCOPE");
 });
 
-test("detail focus does not use unrelated next-post keywords",async()=>{
+test("detail focus keeps institution-delivered professional service IN_SCOPE without using next-post keywords",async()=>{
   const title="청소년활동 안전컨설팅 참여기관 모집";const notice:RawNotice={sourceId:"test",sourceNoticeId:"3",title,url:"https://example.com/3",publishedAt:null,rawText:title,collectedAt:"2026-08-22T00:00:00.000Z",dedupeKey:makeDedupeKey("test",title,"https://example.com/3")};
   const fetcher:typeof fetch=async()=>new Response(`<html><body><h1>${title}</h1><p>전문 컨설턴트가 시설을 방문해 안전 점검 서비스를 무상으로 제공합니다. 참여기관이 온라인으로 신청합니다.</p><p>다음글</p><a>청소년 우수사례 공모전</a></body></html>`,{status:200,headers:{"content-type":"text/html; charset=utf-8"}});
-  const result=await assessNoticeRelevance(notice,source(),fetcher);assert.equal(result.status,"OUT_OF_SCOPE");assert.match(result.reason,/컨설팅/);
+  const result=await assessNoticeRelevance(notice,source(),fetcher);assert.equal(result.status,"IN_SCOPE");assert.deepEqual(result.supportTypes,["PROFESSIONAL_SERVICE"]);assert.doesNotMatch(result.reason,/공모전/);
 });
 
 test("detail fetch failure is isolated as RELEVANCE_REVIEW",async()=>{
@@ -77,5 +77,5 @@ test("sdream attachment-only notice becomes IN_SCOPE from supported official doc
   const title="2026년 배움터 교육지원사업 공모";const notice:RawNotice={sourceId:"sdream",sourceNoticeId:"BBS25000000000506387",title,url:"https://www.sdream.or.kr/w/bbs0103V?BBS_SID=BBS25000000000506387",publishedAt:null,rawText:title,collectedAt:"2026-08-24T06:02:32.177Z",dedupeKey:"sdream:fixture"};
   const section=`<?xml version="1.0"?><hp:section xmlns:hp="urn:hancom:section"><hp:p><hp:run><hp:t>신청대상은 교육활동을 수행하는 비영리 기관 및 단체입니다. 선정된 기관은 아동청소년 교육 프로그램을 운영하고 기관당 지원금을 지급받으며 사업계획서를 제출합니다. 신청기간 2026년 8월 1일 ~ 2026년 9월 4일</hp:t></hp:run></hp:p></hp:section>`;const bytes=zipSync({mimetype:strToU8("application/hwp+zip"),"Contents/section0.xml":strToU8(section)});
   const fetcher:typeof fetch=async input=>String(input).includes("/download?")?new Response(bytes,{headers:{"content-type":"application/vnd.hancom.hwpx"}}):new Response(`<h1>${title}</h1><p>첨부파일</p><a href="#null" onclick="onFileDown('FLE_FIXTURE'); return false;">2026 배움터 교육지원사업 공모요강.hwpx</a><p>이전글</p>`,{headers:{"content-type":"text/html; charset=utf-8"}});
-  const result=await assessNoticeRelevance(notice,{...source("sdream"),url:"https://www.sdream.or.kr/main"},fetcher);assert.equal(result.status,"IN_SCOPE");assert.match(result.reason,/재정지원과 기관의 사업수행 구조/);
+  const result=await assessNoticeRelevance(notice,{...source("sdream"),url:"https://www.sdream.or.kr/main"},fetcher);assert.equal(result.status,"IN_SCOPE");assert.deepEqual(result.supportTypes,["MONEY"]);assert.ok(result.supportEvidence.MONEY?.length);
 });

@@ -16,6 +16,9 @@ export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus];
 export const RelevanceStatus = { IN_SCOPE:"IN_SCOPE", OUT_OF_SCOPE:"OUT_OF_SCOPE", RELEVANCE_REVIEW:"RELEVANCE_REVIEW" } as const;
 export type RelevanceStatus = (typeof RelevanceStatus)[keyof typeof RelevanceStatus];
 
+export const ExternalResourceType = { MONEY:"MONEY", STAFF:"STAFF", MATERIAL:"MATERIAL", PROGRAM:"PROGRAM", PROFESSIONAL_SERVICE:"PROFESSIONAL_SERVICE" } as const;
+export type ExternalResourceType = (typeof ExternalResourceType)[keyof typeof ExternalResourceType];
+
 export type Opportunity = {
   id:string;
   dedupeKey:string;
