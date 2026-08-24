@@ -3,11 +3,12 @@ import { OfficialBoardCollector, YouthBoardCollector } from "./web-collector.ts"
 import { sourceRegistry } from "./registry.ts";
 import { RssCollector } from "./rss-collector.ts";
 import { SeoulNewsApiCollector } from "./seoul-news-api-collector.ts";
+import { GrantSourceBoardCollector } from "./grant-source-board-collector.ts";
 import type { YouthGrantEnv } from "../cloudflare.ts";
 import type { Collector, CrawlRunResult, SourceRunResult } from "./contracts.ts";
 import { classifySourceFailure } from "./fetch-policy.ts";
 
-export function betaCollectors(env:Pick<YouthGrantEnv,"SEOUL_OPEN_API_KEY">={}):Collector[]{return sourceRegistry.filter(source=>source.implemented&&source.enabled).map(source=>source.method==="RSS"?new RssCollector(source):source.method==="API"?new SeoulNewsApiCollector(source,env.SEOUL_OPEN_API_KEY):["kywa","ggyouth","ggyouthnet"].includes(source.id)?new YouthBoardCollector(source):new OfficialBoardCollector(source));}
+export function betaCollectors(env:Pick<YouthGrantEnv,"SEOUL_OPEN_API_KEY">={}):Collector[]{return sourceRegistry.filter(source=>source.implemented&&source.enabled).map(source=>source.method==="RSS"?new RssCollector(source):source.method==="API"?new SeoulNewsApiCollector(source,env.SEOUL_OPEN_API_KEY):["mogef","fry","sdream"].includes(source.id)?new GrantSourceBoardCollector(source):["kywa","ggyouth","ggyouthnet"].includes(source.id)?new YouthBoardCollector(source):new OfficialBoardCollector(source));}
 
 export async function runCollection(collectors:Collector[]):Promise<CrawlRunResult>{
   const startedAt=new Date().toISOString();
