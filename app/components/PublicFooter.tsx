@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions -- the native dialog handles pointer input only on its backdrop; Escape and close buttons remain available. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -24,6 +25,6 @@ export function PublicFooter(){
       </div>
       <p className="footer-copyright">© 2026 YouthGrant. All rights reserved.</p>
     </div>
-    {open?<dialog open className="contact-modal-overlay" aria-modal="true" aria-labelledby="contact-modal-title"><button className="contact-modal-backdrop" type="button" onClick={close} aria-label="배경을 눌러 문의 창 닫기"/><section className="contact-modal"><button ref={closeRef} className="contact-modal-x" type="button" onClick={close} aria-label="문의 창 닫기">×</button><h2 id="contact-modal-title">문의 및 오류제보</h2><p>자동 문의 접수 기능은 준비 중입니다.</p><p>문의사항이나 오류 제보는 아래 이메일로 보내주세요.</p><strong className="contact-modal-email">{CONTACT_EMAIL}</strong><div className="contact-modal-actions"><button type="button" onClick={copyEmail}>이메일 주소 복사</button><a href="mailto:youthgreen94@gmail.com?subject=%5BYouthGrant%20문의%20및%20오류제보%5D">이메일 보내기</a><button type="button" className="contact-modal-close" onClick={close}>닫기</button></div><p className={`contact-copy-status ${copyState}`} aria-live="polite">{copyState==="copied"?"이메일 주소를 복사했습니다.":copyState==="failed"?"복사하지 못했습니다. 이메일 주소를 직접 복사해 주세요.":""}</p></section></dialog>:null}
+    {open?<dialog open className="contact-modal-overlay" aria-modal="true" aria-labelledby="contact-modal-title" onMouseDown={event=>{if(event.target===event.currentTarget)close();}}><section className="contact-modal"><button ref={closeRef} className="contact-modal-x" type="button" onClick={close} aria-label="문의 창 닫기">×</button><h2 id="contact-modal-title">문의 및 오류제보</h2><p>자동 문의 접수 기능은 준비 중입니다.</p><p>문의사항이나 오류 제보는 아래 이메일로 보내주세요.</p><strong className="contact-modal-email">{CONTACT_EMAIL}</strong><div className="contact-modal-actions"><button type="button" onClick={copyEmail}>이메일 주소 복사</button><a href="mailto:youthgreen94@gmail.com?subject=%5BYouthGrant%20문의%20및%20오류제보%5D">이메일 보내기</a><button type="button" className="contact-modal-close" onClick={close}>닫기</button></div><p className={`contact-copy-status ${copyState}`} aria-live="polite">{copyState==="copied"?"이메일 주소를 복사했습니다.":copyState==="failed"?"복사하지 못했습니다. 이메일 주소를 직접 복사해 주세요.":""}</p></section></dialog>:null}
   </footer>;
 }
