@@ -20,4 +20,5 @@ export function sortExplorerGrants(grants:GrantViewModel[],sort:ExplorerSort){
   }).map(item=>item.grant);
 }
 
-export function explorerEmptyState(activeSourceCount:number){return{heading:"현재 공개할 지원사업 공고가 없습니다.",body:`현재 ${activeSourceCount}개 공식 출처를 확인하고 있습니다. 신청 주체와 재정지원 근거가 확인된 공고만 공개하며, 새 공고가 확인되면 자동으로 반영합니다.`};}
+export function explorerEmptyState(activeSourceCount:number){return{heading:"현재 공개할 지원사업 공고가 없습니다.",body:`현재 ${activeSourceCount}개 공식 출처를 확인하고 있습니다. 청소년시설이 신청해 실제로 활용할 수 있는 지원 내용과 신청 근거가 확인된 공고만 공개합니다. 새 공고가 확인되면 자동으로 반영합니다.`};}
+export function hasPublicExplorerControls(grantCount:number){return grantCount>0;}
