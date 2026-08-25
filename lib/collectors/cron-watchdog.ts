@@ -22,7 +22,7 @@ async function findExpectedRun(db:D1DatabaseLike,start:string,end:string){
   return row?{id:String(row.id),status:String(row.status),startedAt:String(row.started_at)}:null;
 }
 async function findLatestRunBefore(db:D1DatabaseLike,before:string){
-  const row=await db.prepare("SELECT id,status,started_at FROM crawl_runs WHERE trigger='AUTOMATION' AND status='SUCCESS' AND started_at<? ORDER BY started_at DESC LIMIT 1").bind(before).first<Record<string,unknown>>();
+  const row=await db.prepare("SELECT id,status,started_at FROM crawl_runs WHERE trigger='AUTOMATION' AND started_at<? ORDER BY started_at DESC LIMIT 1").bind(before).first<Record<string,unknown>>();
   return row?{id:String(row.id),status:String(row.status),startedAt:String(row.started_at)}:null;
 }
 async function claimAlert(db:D1DatabaseLike,scheduledAt:string,claimedAt:string){
@@ -39,12 +39,13 @@ function kst(value:Date){
 }
 
 function alertMessage(expected:Date,latest:CrawlRun|null){
-  return `[YouthGrant 수집 확인 필요]\n\n예정된 ${kst(expected).slice(11)} KST 수집 기록이\n${kst(new Date(expected.getTime()+WATCHDOG_DELAY_MS)).slice(11)}까지 확인되지 않았습니다.\n\n예정 시각: ${kst(expected)}\n최근 정상 수집: ${latest?kst(new Date(latest.startedAt)):"확인되지 않음"}\n\nCloudflare Scheduled Event 및 Worker Logs를 확인해 주세요.`;
+  return `[YouthGrant 수집 확인 필요]\n\n예정된 ${kst(expected).slice(11)} KST 수집 기록이\n${kst(new Date(expected.getTime()+WATCHDOG_DELAY_MS)).slice(11)}까지 확인되지 않았습니다.\n\n예정 시각: ${kst(expected)}\n최근 수집: ${latest?`${kst(new Date(latest.startedAt))} · ${latest.status}`:"확인되지 않음"}\n\nCloudflare Scheduled Event 및 Worker Logs를 확인해 주세요.`;
 }
 
 export async function runCronWatchdog(controller:ScheduledControllerLike,env:YouthGrantEnv,overrides:Partial<WatchdogDependencies>={}){
   const dependencies={...defaults,...overrides};
-  const expected=new Date(controller.scheduledTime-WATCHDOG_DELAY_MS);
+  const watchdogSlot=new Date(controller.scheduledTime);watchdogSlot.setUTCSeconds(0,0);
+  const expected=new Date(watchdogSlot.getTime()-WATCHDOG_DELAY_MS);
   const expectedIso=expected.toISOString();
   const windowEnd=new Date(controller.scheduledTime).toISOString();
   const context={cron:controller.cron,expected_scheduled_time:expectedIso,watchdog_scheduled_time:windowEnd,environment:env.ENVIRONMENT??"unknown",worker_version:env.CF_VERSION_METADATA?.id??"unknown"};
