@@ -9,6 +9,8 @@ function defaultEligibility(value:Opportunity["eligibilityVerification"]){if(["V
 
 export function ReviewEditor({opportunity,rawText}:{opportunity:Opportunity;rawText:string}){
   const router=useRouter();const [saving,setSaving]=useState(false);const [message,setMessage]=useState("");
+  const canReverify=opportunity.reviewStatus==="PENDING"||opportunity.reviewStatus==="REVIEW_REQUIRED";
+  const [reverifying,setReverifying]=useState(false);const [reverifyMessage,setReverifyMessage]=useState("");const [reverified,setReverified]=useState<{reviewStatus:string;deadline:string|null;deadlineVerification:string;eligibilityVerification:string;facilityTypes:string[];processed:number;failed:number}|null>(null);
   const [reviewStatus,setReviewStatus]=useState<string>(["CONFIRMED","DEFERRED","EXCLUDED"].includes(opportunity.reviewStatus)?opportunity.reviewStatus:"CONFIRMED");
   const [deadlineDecision,setDeadlineDecision]=useState(opportunity.deadline?"CONFIRMED":"UNKNOWN");const [deadline,setDeadline]=useState(localDateTime(opportunity.deadline));
   const [eligibilityDecision,setEligibilityDecision]=useState(defaultEligibility(opportunity.eligibilityVerification));const [facilities,setFacilities]=useState(opportunity.facilityTypes.join(", "));const [eligibilityNote,setEligibilityNote]=useState("");
@@ -23,8 +25,17 @@ export function ReviewEditor({opportunity,rawText}:{opportunity:Opportunity;rawT
     }catch(error){setMessage(error instanceof Error?error.message:"저장하지 못했습니다.");}finally{setSaving(false);}
   }
 
+  async function reverify(){
+    setReverifying(true);setReverifyMessage("");
+    try{
+      const response=await fetch(`/api/ops/review/${encodeURIComponent(opportunity.id)}/reverify`,{method:"POST"});const result=await response.json() as {error?:string;reviewStatus?:string;deadline?:string|null;deadlineVerification?:string;eligibilityVerification?:string;facilityTypes?:string[];processed?:number;failed?:number};if(!response.ok)throw new Error(result.error??"자동 재검증에 실패했습니다.");
+      const completed={reviewStatus:result.reviewStatus??opportunity.reviewStatus,deadline:result.deadline??null,deadlineVerification:result.deadlineVerification??opportunity.deadlineVerification,eligibilityVerification:result.eligibilityVerification??opportunity.eligibilityVerification,facilityTypes:result.facilityTypes??opportunity.facilityTypes,processed:result.processed??0,failed:result.failed??0};setReverified(completed);if(completed.deadline)setDeadline(localDateTime(completed.deadline));if(completed.facilityTypes.length)setFacilities(completed.facilityTypes.join(", "));setEligibilityDecision(defaultEligibility(completed.eligibilityVerification as Opportunity["eligibilityVerification"]));setReverifyMessage(`재검증 완료 · ${completed.reviewStatus}`);if(completed.reviewStatus!=="PUBLISHED")router.refresh();
+    }catch(error){setReverifyMessage(error instanceof Error?error.message:"자동 재검증에 실패했습니다.");}finally{setReverifying(false);}
+  }
+
   return <form className="review-editor" onSubmit={submit}>
     <section className="review-source"><div><h2>{opportunity.title}</h2><p>{opportunity.organization} · {opportunity.sourceMethod}</p></div><a href={opportunity.sourceUrl} target="_blank" rel="noopener noreferrer">공식 원문 확인 ↗</a><pre>{rawText}</pre></section>
+    <section className="review-reverify"><div><h3>자동 재검증</h3><p>공식 원문·첨부를 현재 검증 규칙으로 다시 확인합니다.</p>{reverified?<p>마감 {reverified.deadline??"확인 필요"} · 마감 검증 {reverified.deadlineVerification} · 자격 검증 {reverified.eligibilityVerification} · 상태 {reverified.reviewStatus} · 처리 {reverified.processed}건{reverified.failed?` · 실패 ${reverified.failed}건`:""}</p>:null}</div><button type="button" onClick={reverify} disabled={!canReverify||reverifying||reverified?.reviewStatus==="PUBLISHED"}>{reverifying?"재검증 중...":"자동 재검증"}</button><span role="status">{reverifyMessage}</span></section>
     <div className="review-fields">
       <fieldset><legend>신청 마감일</legend><p>자동 근거: {opportunity.deadlineEvidence??"없음"}</p><select value={deadlineDecision} onChange={event=>setDeadlineDecision(event.target.value)}><option value="CONFIRMED">날짜 확정</option><option value="UNKNOWN">확인 불가</option></select><input aria-label="신청 마감일" type="datetime-local" value={deadline} onChange={event=>setDeadline(event.target.value)} disabled={deadlineDecision!=="CONFIRMED"}/></fieldset>
       <fieldset><legend>신청 자격</legend><p>자동 근거: {opportunity.eligibilityEvidence??"없음"}</p><select value={eligibilityDecision} onChange={event=>setEligibilityDecision(event.target.value)}><option value="ELIGIBLE">신청 가능 확정</option><option value="INELIGIBLE">신청 불가 확정</option><option value="UNKNOWN">확인 불가</option></select><input aria-label="시설유형" value={facilities} onChange={event=>setFacilities(event.target.value)} placeholder="청소년문화의집, 청소년수련관"/><textarea aria-label="신청 자격 수동 근거" value={eligibilityNote} onChange={event=>setEligibilityNote(event.target.value)} placeholder="원문에서 확인한 신청 자격 근거" disabled={eligibilityDecision==="UNKNOWN"} style={{minHeight:72,padding:"8px 10px",resize:"vertical",border:"1px solid #2C4340",borderRadius:5,background:"#0A1211",color:"#fff"}}/></fieldset>

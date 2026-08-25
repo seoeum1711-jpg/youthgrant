@@ -7,6 +7,7 @@ import { applyOpportunityReview, parseReviewMutation } from "../lib/data/review-
 import { processAttachmentMessage } from "../lib/attachments/pipeline.ts";
 import type { AttachmentQueueMessage } from "../lib/attachments/contracts.ts";
 import { ContactValidationError, parseContactSubmission, sendContactEmail } from "../lib/contact.ts";
+import { reverifyOpportunity, TargetedReverificationError } from "../lib/data/opportunity-reverification.ts";
 
 type WorkerExecutionContext={waitUntil(promise:Promise<unknown>):void;passThroughOnException():void};
 type ScheduledControllerLike={cron:string;scheduledTime:number;type:string};
@@ -29,6 +30,12 @@ const worker={
       if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405,headers:{allow:"POST"}});
       try{const result=await runCollectionToD1(env.DB,betaCollectors(env),"MANUAL",{queue:env.ATTACHMENT_QUEUE,telegram:{environment:env.ENVIRONMENT,siteOrigin:env.SITE_ORIGIN,botToken:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID}});return Response.json(result);}
       catch(error){if(error instanceof CollectionLockedError)return Response.json({error:error.message},{status:423});throw error;}
+    }
+    const reverifyMatch=url.pathname.match(/^\/api\/ops\/review\/([^/]+)\/reverify$/);
+    if(reverifyMatch){
+      if(request.method!=="POST")return Response.json({error:"Method not allowed"},{status:405,headers:{allow:"POST"}});
+      try{return Response.json(await reverifyOpportunity(env,decodeURIComponent(reverifyMatch[1])));}
+      catch(error){if(error instanceof URIError)return Response.json({error:"공고 식별자가 올바르지 않습니다."},{status:400});if(error instanceof TargetedReverificationError)return Response.json({error:error.message},{status:error.status});console.error("Targeted opportunity reverification failed",{opportunityId:reverifyMatch[1]});return Response.json({error:"자동 재검증에 실패했습니다. 잠시 후 다시 시도해 주세요."},{status:500});}
     }
     const reviewMatch=url.pathname.match(/^\/api\/ops\/review\/([^/]+)$/);
     if(reviewMatch){
