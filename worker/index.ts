@@ -8,9 +8,9 @@ import { processAttachmentMessage } from "../lib/attachments/pipeline.ts";
 import type { AttachmentQueueMessage } from "../lib/attachments/contracts.ts";
 import { ContactValidationError, parseContactSubmission, sendContactEmail } from "../lib/contact.ts";
 import { reverifyOpportunity, TargetedReverificationError } from "../lib/data/opportunity-reverification.ts";
+import { runScheduledTask, type ScheduledControllerLike } from "../lib/collectors/scheduled-run.ts";
 
 type WorkerExecutionContext={waitUntil(promise:Promise<unknown>):void;passThroughOnException():void};
-type ScheduledControllerLike={cron:string;scheduledTime:number;type:string};
 type QueueMessageLike<T>={body:T;ack():void;retry(options?:{delaySeconds?:number}):void};
 type QueueBatchLike<T>={messages:QueueMessageLike<T>[]};
 
@@ -46,9 +46,11 @@ const worker={
     if(url.pathname==="/api/health")return Response.json({service:"YouthGrant",status:"ok",environment:env.ENVIRONMENT??"unknown"});
     return handler.fetch(request,env,ctx);
   },
-  async scheduled(_controller:ScheduledControllerLike,env:YouthGrantEnv){
-    try{await runCollectionToD1(env.DB,betaCollectors(env),"AUTOMATION",{queue:env.ATTACHMENT_QUEUE,telegram:{environment:env.ENVIRONMENT,siteOrigin:env.SITE_ORIGIN,botToken:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID}});}
-    catch(error){if(error instanceof CollectionLockedError)return;throw error;}
+  async scheduled(controller:ScheduledControllerLike,env:YouthGrantEnv){
+    await runScheduledTask(controller,env,async()=>{
+      try{return await runCollectionToD1(env.DB,betaCollectors(env),"AUTOMATION",{queue:env.ATTACHMENT_QUEUE,telegram:{environment:env.ENVIRONMENT,siteOrigin:env.SITE_ORIGIN,botToken:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID}});}
+      catch(error){if(error instanceof CollectionLockedError)return{id:null,status:"SKIPPED_LOCKED"};throw error;}
+    });
   },
   async queue(batch:QueueBatchLike<AttachmentQueueMessage>,env:YouthGrantEnv){for(const message of batch.messages){try{await processAttachmentMessage(env,message.body);message.ack();}catch{message.retry({delaySeconds:60});}}},
 };

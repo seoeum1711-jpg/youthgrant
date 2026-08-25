@@ -29,12 +29,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
-      - name: Provision bindings and deploy bootstrap
-        run: npx wrangler deploy --env "$CLOUDFLARE_ENV"
-      - name: Apply non-destructive D1 migrations
-        run: npx wrangler d1 migrations apply DB --remote --env "$CLOUDFLARE_ENV"
       - name: Configure Ops secret
         run: printf '%s' "$OPS_ACCESS_TOKEN" | npx wrangler secret put OPS_ACCESS_TOKEN --env "$CLOUDFLARE_ENV"
-      - name: Deploy migrated application
-        run: npx wrangler deploy --env "$CLOUDFLARE_ENV"
+      - name: Deploy application without changing triggers
+        run: node scripts/cloudflare-deploy.mjs "$CLOUDFLARE_ENV"

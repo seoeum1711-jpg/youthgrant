@@ -36,4 +36,5 @@ export type YouthGrantEnv = {
   CONTACT_RATE_LIMIT?: RateLimiterLike;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
+  CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
 };
