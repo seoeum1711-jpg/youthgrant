@@ -31,5 +31,5 @@ jobs:
       - run: npm ci
       - name: Configure Ops secret
         run: printf '%s' "$OPS_ACCESS_TOKEN" | npx wrangler secret put OPS_ACCESS_TOKEN --env "$CLOUDFLARE_ENV"
-      - name: Deploy application without changing triggers
+      - name: Apply migrations and deploy application once
         run: node scripts/cloudflare-deploy.mjs "$CLOUDFLARE_ENV"

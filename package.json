@@ -19,9 +19,7 @@
     "db:migrate:preview": "wrangler d1 migrations apply DB --remote --env preview",
     "db:migrate:production": "wrangler d1 migrations apply DB --remote --env production",
     "deploy:preview": "node scripts/cloudflare-deploy.mjs preview",
-    "deploy:production": "node scripts/cloudflare-deploy.mjs production",
-    "deploy:triggers:preview": "wrangler triggers deploy --env preview",
-    "deploy:triggers:production": "wrangler triggers deploy --env production"
+    "deploy:production": "node scripts/cloudflare-deploy.mjs production"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
