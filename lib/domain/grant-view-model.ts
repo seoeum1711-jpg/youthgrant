@@ -77,4 +77,9 @@ export function toGrantViewModel(opportunity:Opportunity, now=new Date()):GrantV
   };
 }
 
-export function toPublicGrantList(rows:Opportunity[],now=new Date()){return rows.filter(row=>row.reviewStatus==="PUBLISHED"||row.reviewStatus==="CONFIRMED").map(row=>toGrantViewModel(row,now));}
+export function toPublicGrantList(rows:Opportunity[],now=new Date()){
+  return rows
+    .filter(row=>row.reviewStatus==="PUBLISHED"||row.reviewStatus==="CONFIRMED")
+    .filter(row=>{const deadline=verifiedDeadline(row);return !deadline||deadline>=now;})
+    .map(row=>toGrantViewModel(row,now));
+}
