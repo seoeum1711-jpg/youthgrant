@@ -116,6 +116,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "verification_version": {
+          "name": "verification_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "content_hash": {
           "name": "content_hash",
           "type": "text",

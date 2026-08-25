@@ -2,6 +2,8 @@ import type { D1DatabaseLike } from "../cloudflare.ts";
 import { ReviewStatus, Verification } from "../domain/types.ts";
 import type { AttachmentEvidence, ExtractionArtifact } from "./contracts.ts";
 
+export const CURRENT_VERIFICATION_VERSION="verification-v2";
+
 type AttachmentEvidenceWithoutUrl=Omit<AttachmentEvidence,"originalUrl">;
 
 const DEADLINE_CONTEXT=/(신청\s*기간|접수\s*기간|공모\s*기간|모집\s*기간|신청\s*마감|접수\s*마감|제출\s*기한|신청\s*기한)/g;

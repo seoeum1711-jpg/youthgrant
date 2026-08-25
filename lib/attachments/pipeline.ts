@@ -4,7 +4,7 @@ import { FetchPolicyError, fetchWithTimeout } from "../collectors/fetch-policy.t
 import { classifyDocumentRole } from "./discovery.ts";
 import { detectAttachmentFormat, extensionOf } from "./file-type.ts";
 import { parseAttachmentBytes } from "./parsers.ts";
-import { applyAttachmentEvidence, extractAttachmentEvidence } from "./verification.ts";
+import { applyAttachmentEvidence, CURRENT_VERIFICATION_VERSION, extractAttachmentEvidence } from "./verification.ts";
 import { finalizeOpportunityVerification } from "../data/opportunity-finalization.ts";
 
 const MAX_ATTACHMENT_BYTES=10*1024*1024;
@@ -24,6 +24,7 @@ type AttachmentRow={
   priority:number;
   fetch_status:string;
   parse_status:string;
+  verification_version:string|null;
   content_hash:string|null;
   archive_depth:number;
 };
@@ -65,8 +66,8 @@ async function loadBytes(row:AttachmentRow,fetcher:typeof fetch){
 }
 
 async function persistParseResult(db:D1DatabaseLike,row:Pick<AttachmentRow,"id">,parsed:AttachmentProcessResult,evidence:AttachmentEvidence[]){
-  await db.prepare("UPDATE attachments SET parse_status=?,parse_method=?,evidence_json=?,text_extracted=?,error_code=?,error_message=?,processed_at=? WHERE id=?")
-    .bind(parsed.status,parsed.parseMethod,JSON.stringify(evidence),parsed.artifact?.blocks.length?1:0,parsed.errorCode??null,parsed.errorMessage??null,new Date().toISOString(),row.id).run();
+  await db.prepare("UPDATE attachments SET parse_status=?,parse_method=?,verification_version=?,evidence_json=?,text_extracted=?,error_code=?,error_message=?,processed_at=? WHERE id=?")
+    .bind(parsed.status,parsed.parseMethod,parsed.status==="PARSED"?CURRENT_VERIFICATION_VERSION:null,JSON.stringify(evidence),parsed.artifact?.blocks.length?1:0,parsed.errorCode??null,parsed.errorMessage??null,new Date().toISOString(),row.id).run();
 }
 
 async function recordParseMetric(db:D1DatabaseLike,sourceRunId:string|null,status:string){
@@ -111,7 +112,7 @@ async function processZipChildren(db:D1DatabaseLike,parent:AttachmentRow,childre
 async function fail(db:D1DatabaseLike,row:AttachmentRow,error:unknown){
   const message=error instanceof Error?error.message:"Attachment processing failed";
   const code=error instanceof FetchPolicyError?error.code:/^[A-Z0-9_]+$/.test(message)?message:"ATTACHMENT_PROCESSING_FAILED";
-  await db.prepare("UPDATE attachments SET fetch_status=CASE WHEN fetch_status='FETCHED' THEN fetch_status ELSE 'FETCH_FAILED' END,parse_status='PARSE_FAILED',error_code=?,error_message=?,processed_at=? WHERE id=?")
+  await db.prepare("UPDATE attachments SET fetch_status=CASE WHEN fetch_status='FETCHED' THEN fetch_status ELSE 'FETCH_FAILED' END,parse_status='PARSE_FAILED',verification_version=NULL,error_code=?,error_message=?,processed_at=? WHERE id=?")
     .bind(code,message,new Date().toISOString(),row.id).run();
   if(row.parse_status!=="PARSE_FAILED")await metric(db,row.source_run_id,"attachments_parse_failed");
 }
@@ -119,7 +120,7 @@ async function fail(db:D1DatabaseLike,row:AttachmentRow,error:unknown){
 export async function processAttachmentMessage(env:AttachmentProcessingEnv,message:AttachmentQueueMessage,fetcher:typeof fetch=globalThis.fetch.bind(globalThis),force=false){
   const row=await env.DB.prepare("SELECT * FROM attachments WHERE id=?").bind(message.attachmentId).first<AttachmentRow>();
   if(!row)return{status:"MISSING" as const};
-  if(!force&&row.content_hash&&FINAL_STATUSES.has(row.parse_status)){await finalizeOpportunityVerification(env.DB,row.raw_notice_id,finalizationOptions(env,message));return{status:"SKIPPED" as const};}
+  if(!force&&!message.reverify&&row.content_hash&&FINAL_STATUSES.has(row.parse_status)){await finalizeOpportunityVerification(env.DB,row.raw_notice_id,finalizationOptions(env,message));return{status:"SKIPPED" as const};}
   try{
     const loaded=await loadBytes(row,fetcher);
     const detected=detectAttachmentFormat(loaded.bytes,loaded.filename,loaded.contentType);

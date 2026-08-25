@@ -18,6 +18,7 @@ export type AttachmentQueueMessage={
   sourceId:string;
   url:string;
   notifyOnFinalize?:boolean;
+  reverify?:boolean;
 };
 
 export type ExtractedBlock={location:string;text:string};
