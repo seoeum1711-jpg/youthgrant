@@ -11,7 +11,7 @@
     "start": "vinext start",
     "test": "npm run unit",
     "typecheck": "tsc --noEmit",
-    "unit": "node --experimental-strip-types --test tests/domain.test.ts tests/collectors.test.ts tests/attachments.test.ts tests/review.test.ts tests/security.test.ts tests/relevance.test.ts tests/contact.test.ts tests/source-health.test.ts tests/duplicate-candidates.test.ts tests/golden-recall.test.ts tests/telegram.test.ts tests/pipeline-state.test.ts tests/support-types.test.ts tests/scheduled.test.ts",
+    "unit": "node --experimental-strip-types --test tests/domain.test.ts tests/collectors.test.ts tests/attachments.test.ts tests/review.test.ts tests/security.test.ts tests/relevance.test.ts tests/contact.test.ts tests/source-health.test.ts tests/duplicate-candidates.test.ts tests/golden-recall.test.ts tests/telegram.test.ts tests/pipeline-state.test.ts tests/support-types.test.ts tests/scheduled.test.ts tests/cron-watchdog.test.ts",
     "rendered": "node --test tests/rendered-html.test.mjs",
     "lint": "eslint app lib db worker tests",
     "db:generate": "drizzle-kit generate",

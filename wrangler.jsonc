@@ -26,7 +26,7 @@
     "SITE_ORIGIN": "http://localhost:3000"
   },
   "triggers": {
-    "crons": ["0 */6 * * *"]
+    "crons": ["0 */6 * * *", "10 0,6,12,18 * * *"]
   },
   "observability": {
     "enabled": true
@@ -81,7 +81,7 @@
         { "name": "CONTACT_RATE_LIMIT", "namespace_id": "805101", "simple": { "limit": 5, "period": 60 } }
       ],
       "triggers": {
-        "crons": ["0 */6 * * *"]
+        "crons": ["0 */6 * * *", "10 0,6,12,18 * * *"]
       }
     }
   }

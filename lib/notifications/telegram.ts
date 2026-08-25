@@ -5,6 +5,7 @@ const PRODUCTION_SITE_ORIGIN="https://youthgrant.seoeum1711.workers.dev";
 const TELEGRAM_TIMEOUT_MS=5_000;
 
 type NotificationLogger={info(message:string):void;error(message:string):void};
+type TelegramMessage={text:string;buttonText?:string;buttonUrl?:string};
 
 export type TelegramNotificationConfig={environment?:"development"|"preview"|"production";siteOrigin?:string;botToken?:string;chatId?:string};
 export type FinalizedOpportunityNotification={
@@ -28,10 +29,22 @@ function messageFor(input:FinalizedOpportunityNotification,config:TelegramNotifi
   return null;
 }
 
-export async function notifyOwnerOfFinalizedOpportunity(input:FinalizedOpportunityNotification,config:TelegramNotificationConfig,dependencies:TelegramNotificationDependencies={}){
-  if(!input.opportunityCreated)return false;const logger=dependencies.logger??console;
+export async function sendOwnerTelegramMessage(message:TelegramMessage,config:TelegramNotificationConfig,dependencies:TelegramNotificationDependencies={}){
+  const logger=dependencies.logger??console;
   if(config.environment!=="production"){logger.info("Telegram notification skipped: non-production environment.");return false;}
   if(!config.botToken?.trim()||!config.chatId?.trim()){logger.info("Telegram notification skipped: configuration is missing.");return false;}
   const controller=new AbortController();let timeout:ReturnType<typeof setTimeout>|undefined;
-  try{const message=messageFor(input,config);if(!message)return false;timeout=setTimeout(()=>controller.abort(),TELEGRAM_TIMEOUT_MS);const response=await (dependencies.fetcher??fetch)(`${TELEGRAM_API_ORIGIN}/bot${config.botToken.trim()}/sendMessage`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chat_id:config.chatId.trim(),text:message.text,disable_web_page_preview:true,reply_markup:{inline_keyboard:[[{text:message.buttonText,url:message.buttonUrl}]]}}),signal:controller.signal});if(!response.ok)throw new Error("Telegram API rejected the notification");return true;}catch{logger.error("Telegram notification failed; collection will continue.");return false;}finally{if(timeout)clearTimeout(timeout);}
+  try{
+    timeout=setTimeout(()=>controller.abort(),TELEGRAM_TIMEOUT_MS);
+    const replyMarkup=message.buttonText&&message.buttonUrl?{inline_keyboard:[[{text:message.buttonText,url:message.buttonUrl}]]}:undefined;
+    const response=await (dependencies.fetcher??fetch)(`${TELEGRAM_API_ORIGIN}/bot${config.botToken.trim()}/sendMessage`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chat_id:config.chatId.trim(),text:message.text,disable_web_page_preview:true,...(replyMarkup?{reply_markup:replyMarkup}:{})}),signal:controller.signal});
+    if(!response.ok)throw new Error("Telegram API rejected the notification");
+    return true;
+  }catch{logger.error("Telegram notification failed; collection will continue.");return false;}finally{if(timeout)clearTimeout(timeout);}
+}
+
+export async function notifyOwnerOfFinalizedOpportunity(input:FinalizedOpportunityNotification,config:TelegramNotificationConfig,dependencies:TelegramNotificationDependencies={}){
+  if(!input.opportunityCreated)return false;
+  try{const message=messageFor(input,config);if(!message)return false;return await sendOwnerTelegramMessage(message,config,dependencies);}
+  catch{(dependencies.logger??console).error("Telegram notification failed; collection will continue.");return false;}
 }

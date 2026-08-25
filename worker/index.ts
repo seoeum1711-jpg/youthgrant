@@ -9,6 +9,7 @@ import type { AttachmentQueueMessage } from "../lib/attachments/contracts.ts";
 import { ContactValidationError, parseContactSubmission, sendContactEmail } from "../lib/contact.ts";
 import { reverifyOpportunity, TargetedReverificationError } from "../lib/data/opportunity-reverification.ts";
 import { runScheduledTask, type ScheduledControllerLike } from "../lib/collectors/scheduled-run.ts";
+import { runCronWatchdog, WATCHDOG_CRON } from "../lib/collectors/cron-watchdog.ts";
 
 type WorkerExecutionContext={waitUntil(promise:Promise<unknown>):void;passThroughOnException():void};
 type QueueMessageLike<T>={body:T;ack():void;retry(options?:{delaySeconds?:number}):void};
@@ -47,6 +48,7 @@ const worker={
     return handler.fetch(request,env,ctx);
   },
   async scheduled(controller:ScheduledControllerLike,env:YouthGrantEnv){
+    if(controller.cron===WATCHDOG_CRON){await runCronWatchdog(controller,env);return;}
     await runScheduledTask(controller,env,async()=>{
       try{return await runCollectionToD1(env.DB,betaCollectors(env),"AUTOMATION",{queue:env.ATTACHMENT_QUEUE,telegram:{environment:env.ENVIRONMENT,siteOrigin:env.SITE_ORIGIN,botToken:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID}});}
       catch(error){if(error instanceof CollectionLockedError)return{id:null,status:"SKIPPED_LOCKED"};throw error;}
