@@ -11,6 +11,7 @@ import type { RelevanceDecision } from "../relevance/classifier.ts";
 import { classifySourceFailure } from "./fetch-policy.ts";
 import type { TelegramNotificationConfig, TelegramNotificationDependencies } from "../notifications/telegram.ts";
 import { finalizeOpportunityVerification } from "../data/opportunity-finalization.ts";
+import { normalizeSupportTypes } from "../domain/support-types.ts";
 
 export type CollectionTrigger="MANUAL"|"AUTOMATION";
 
@@ -46,13 +47,15 @@ async function releaseLock(db:D1DatabaseLike,holder:string){await db.prepare("DE
 
 function inferField(title:string){if(/문화|예술/.test(title))return "문화·예술";if(/안전|보호/.test(title))return "안전·보호";if(/국제|교류/.test(title))return "국제교류";if(/진로|창업/.test(title))return "진로·창업";return "청소년 활동";}
 export function shouldCreateOpportunity(relevanceStatus:RelevanceDecision["status"]){return relevanceStatus==="IN_SCOPE";}
-async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDefinition,sourceRunId:string,relevance:RelevanceDecision){
+export async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDefinition,sourceRunId:string,relevance:RelevanceDecision){
   const rawId=await stableId("raw",notice.dedupeKey);
   const opportunityId=await stableId("opp",notice.dedupeKey);
   const existing=await db.prepare(`SELECT rn.id,rn.relevance_status,o.id AS opportunity_id,o.review_status
     FROM raw_notices rn LEFT JOIN opportunity_sources os ON os.raw_notice_id=rn.id AND os.is_primary=1
     LEFT JOIN opportunities o ON o.id=os.opportunity_id WHERE rn.dedupe_key=? LIMIT 1`).bind(notice.dedupeKey).first<{id:string;relevance_status:string;opportunity_id:string|null;review_status:string|null}>();
   const preserveManual=existing?.review_status===ReviewStatus.EXCLUDED&&existing.relevance_status==="IN_SCOPE";
+  const preserveSupportTypes=existing?.review_status===ReviewStatus.CONFIRMED||existing?.review_status===ReviewStatus.DEFERRED||existing?.review_status===ReviewStatus.EXCLUDED;
+  const supportTypesJson=JSON.stringify(normalizeSupportTypes(relevance.supportTypes));
   if(existing){
     if(preserveManual)await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=? WHERE id=?").bind(sourceRunId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.collectedAt,existing.id).run();
     else await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=?,relevance_status=?,relevance_reason=?,relevance_checked_at=? WHERE id=?")
@@ -65,10 +68,11 @@ async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDef
   let opportunityCreated=false;
   if(!preserveManual&&shouldCreateOpportunity(relevance.status)){
     const opportunityInsert=await db.prepare(`INSERT OR IGNORE INTO opportunities
-      (id,dedupe_key,title,organization,region,field,facility_types_json,application_start,deadline,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),null,null,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.PENDING,notice.publishedAt,notice.collectedAt).run();
+      (id,dedupe_key,title,organization,region,field,facility_types_json,support_types_json,application_start,deadline,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),supportTypesJson,null,null,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.PENDING,notice.publishedAt,notice.collectedAt).run();
     opportunityCreated=changes(opportunityInsert)>0;
+    if(existing?.opportunity_id&&!preserveSupportTypes)await db.prepare("UPDATE opportunities SET support_types_json=?,updated_at=? WHERE id=?").bind(supportTypesJson,notice.collectedAt,existing.opportunity_id).run();
     await db.prepare("INSERT OR IGNORE INTO opportunity_sources (opportunity_id,raw_notice_id,is_primary,created_at) VALUES (?,?,1,?)").bind(existing?.opportunity_id??opportunityId,rawNoticeId,notice.collectedAt).run();
   }else if(!preserveManual&&existing?.opportunity_id&&relevance.status==="OUT_OF_SCOPE"){
     await db.prepare("UPDATE opportunities SET review_status='EXCLUDED',updated_at=? WHERE id=?").bind(notice.collectedAt,existing.opportunity_id).run();

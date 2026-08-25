@@ -62,7 +62,7 @@ export function toGrantViewModel(opportunity:Opportunity, now=new Date()):GrantV
   const dateLabel=deadline?formatDate(opportunity.deadline!):"확인 필요";
   return {
     id:opportunity.id,title:opportunity.title,organization:opportunity.organization,sourceName:opportunity.sourceName,sourceMethod:opportunity.sourceMethod,sourceUrl:opportunity.sourceUrl,
-    region:opportunity.region,eligibleRegion:resolveEligibleRegion(opportunity),facilityTypes,field:normalizeField(opportunity.field),status,statusTone,dDay,dateLabel,
+    region:opportunity.region,eligibleRegion:resolveEligibleRegion(opportunity),facilityTypes,supportTypes:opportunity.supportTypes,field:normalizeField(opportunity.field),status,statusTone,dDay,dateLabel,
     applicationPeriod:deadline?`${opportunity.applicationStart?formatDate(opportunity.applicationStart):"접수 시작 확인 필요"} – ${dateLabel}`:"신청 마감 · 확인 필요",
     eligibilityLabel,eligibilityTone:eligibility.tone,
     evidenceText:opportunity.eligibilityEvidence??"자격조건을 자동으로 확정할 근거가 확인되지 않았습니다.",

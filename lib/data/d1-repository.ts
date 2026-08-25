@@ -3,10 +3,11 @@ import type { D1DatabaseLike } from "../cloudflare.ts";
 import { getSource } from "../collectors/registry.ts";
 import { findCrossSourceDuplicateCandidates, summarizePublicDataQuality, type DuplicateCandidate, type DuplicateCandidateRecord, type PublicDataQualitySummary } from "../domain/duplicate-candidates.ts";
 import type { Opportunity, Verification, ReviewStatus } from "../domain/types.ts";
+import { parseSupportTypesJson } from "../domain/support-types.ts";
 import { calculateOperationalHealth, summarizeEligibleDiscovery, type DiscoveryStateRow, type OperationalHealth } from "./source-health.ts";
 
 type OpportunityRow={
-  id:string;dedupe_key:string;title:string;organization:string;region:"경기"|"서울"|"전국";eligible_region:string|null;field:string|null;facility_types_json:string;
+  id:string;dedupe_key:string;title:string;organization:string;region:"경기"|"서울"|"전국";eligible_region:string|null;field:string|null;facility_types_json:string;support_types_json:string|null;
   application_start:string|null;deadline:string|null;deadline_verification:Verification;deadline_evidence:string|null;deadline_evidence_location:string|null;
   eligibility_verification:Verification;eligibility_evidence:string|null;eligibility_evidence_location:string|null;amount_won:number|null;amount_text:string|null;
   self_burden:string|null;support_details:string|null;review_status:ReviewStatus;published_at:string|null;updated_at:string;
@@ -22,7 +23,7 @@ export type CrawlRunSummary={id:string;status:string;trigger:"MANUAL"|"AUTOMATIO
 function db():D1DatabaseLike{if(!env.DB)throw new Error("Cloudflare D1 binding `DB` is unavailable.");return env.DB;}
 function facilities(value:string){try{const parsed=JSON.parse(value);return Array.isArray(parsed)&&parsed.every(item=>typeof item==="string")?parsed:["기타 / 확인 필요"];}catch{return["기타 / 확인 필요"];}}
 function matchRange(evidence:string|null,facilityTypes:string[]){if(!evidence)return null;for(const facility of facilityTypes){if(facility.includes("확인 필요"))continue;const start=evidence.indexOf(facility);if(start>=0)return{start,end:start+facility.length};}return null;}
-function mapOpportunity(row:OpportunityRow):Opportunity{const facilityTypes=facilities(row.facility_types_json);return{id:row.id,dedupeKey:row.dedupe_key,title:row.title,organization:row.organization,sourceId:row.source_id,sourceName:row.source_name,sourceMethod:row.source_method,sourceUrl:row.source_url,region:row.region,eligibleRegion:row.eligible_region,facilityTypes,field:row.field,applicationStart:row.application_start,deadline:row.deadline,deadlineVerification:row.deadline_verification,deadlineEvidence:row.deadline_evidence,deadlineEvidenceLocation:row.deadline_evidence_location,eligibilityVerification:row.eligibility_verification,eligibilityEvidence:row.eligibility_evidence,eligibilityEvidenceLocation:row.eligibility_evidence_location,eligibilityMatchRange:matchRange(row.eligibility_evidence,facilityTypes),amountWon:row.amount_won,amountText:row.amount_text,selfBurden:row.self_burden,supportDetails:row.support_details,reviewStatus:row.review_status,collectedAt:row.collected_at};}
+function mapOpportunity(row:OpportunityRow):Opportunity{const facilityTypes=facilities(row.facility_types_json);return{id:row.id,dedupeKey:row.dedupe_key,title:row.title,organization:row.organization,sourceId:row.source_id,sourceName:row.source_name,sourceMethod:row.source_method,sourceUrl:row.source_url,region:row.region,eligibleRegion:row.eligible_region,facilityTypes,supportTypes:parseSupportTypesJson(row.support_types_json),field:row.field,applicationStart:row.application_start,deadline:row.deadline,deadlineVerification:row.deadline_verification,deadlineEvidence:row.deadline_evidence,deadlineEvidenceLocation:row.deadline_evidence_location,eligibilityVerification:row.eligibility_verification,eligibilityEvidence:row.eligibility_evidence,eligibilityEvidenceLocation:row.eligibility_evidence_location,eligibilityMatchRange:matchRange(row.eligibility_evidence,facilityTypes),amountWon:row.amount_won,amountText:row.amount_text,selfBurden:row.self_burden,supportDetails:row.support_details,reviewStatus:row.review_status,collectedAt:row.collected_at};}
 
 const opportunitySelect=`SELECT o.*,s.id AS source_id,s.name AS source_name,s.method AS source_method,rn.url AS source_url,rn.collected_at
   FROM opportunities o

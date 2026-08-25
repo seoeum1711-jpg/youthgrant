@@ -31,6 +31,7 @@ export type Opportunity = {
   region:"경기"|"서울"|"전국";
   eligibleRegion?:string|null;
   facilityTypes:string[];
+  supportTypes:ExternalResourceType[];
   field:string|null;
   applicationStart:string|null;
   deadline:string|null;
@@ -51,7 +52,7 @@ export type Opportunity = {
 
 export type GrantViewModel = {
   id:string; title:string; organization:string; sourceName:string; sourceMethod:string; sourceUrl:string;
-  region:string; eligibleRegion:string; facilityTypes:string[]; field:string;
+  region:string; eligibleRegion:string; facilityTypes:string[]; supportTypes:ExternalResourceType[]; field:string;
   status:"접수중"|"마감임박"|"예정"|"일정 확인 필요"|"마감";
   statusTone:"open"|"soon"|"plan"|"check"|"closed";
   dDay:string|null; dateLabel:string; applicationPeriod:string;
