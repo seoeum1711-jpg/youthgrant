@@ -14,7 +14,7 @@ export function detectAttachmentFormat(bytes:Uint8Array,filename:string,contentT
   else if(starts(bytes,[0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))format="PNG";
   const expected:Record<string,AttachmentFormat>={pdf:"PDF",hwpx:"HWPX",hwp:"HWP",zip:"ZIP",jpg:"JPG",jpeg:"JPG",png:"PNG"};
   const mismatch=Boolean(extension&&expected[extension]&&expected[extension]!==format);
-  const declared=(contentType??"").split(";",1)[0].trim().toLowerCase();const expectedMime=format==="UNSUPPORTED"?null:MIME_BY_FORMAT[format];const genericMime=!declared||/(?:octe[tr]-stream|x-msdownload|binary)/.test(declared);
+  const declared=(contentType??"").split(";",1)[0].trim().toLowerCase();const expectedMime=format==="UNSUPPORTED"?null:MIME_BY_FORMAT[format];const genericMime=!declared||/(?:octe[tr]-stream|x-msdownload|binary|application\/unknown)/.test(declared);
   const mimeMismatch=Boolean(!genericMime&&expectedMime&&!declared.includes(expectedMime)&&!(format==="HWPX"&&/(zip|hwpx)/.test(declared))&&!(format==="HWP"&&/hwp/.test(declared)));
   return{format,extension,mismatch:mismatch||mimeMismatch,detectedMime:expectedMime};
 }

@@ -93,3 +93,16 @@ test("sdream attachment-only notice becomes IN_SCOPE from supported official doc
   const fetcher:typeof fetch=async input=>String(input).includes("/download?")?new Response(bytes,{headers:{"content-type":"application/vnd.hancom.hwpx"}}):new Response(`<h1>${title}</h1><p>첨부파일</p><a href="#null" onclick="onFileDown('FLE_FIXTURE'); return false;">2026 배움터 교육지원사업 공모요강.hwpx</a><p>이전글</p>`,{headers:{"content-type":"text/html; charset=utf-8"}});
   const result=await assessNoticeRelevance(notice,{...source("sdream"),url:"https://www.sdream.or.kr/main"},fetcher);assert.equal(result.status,"IN_SCOPE");assert.deepEqual(result.supportTypes,["MONEY"]);assert.ok(result.supportEvidence.MONEY?.length);
 });
+
+test("sdream retries its official detail with a bounded referrer fallback before attachment relevance",async()=>{
+  const title="2026년 배움터 교육지원사업 공모";const notice:RawNotice={sourceId:"sdream",sourceNoticeId:"BBS25000000000506387",title,url:"https://www.sdream.or.kr/w/bbs0103V?BBS_SID=BBS25000000000506387",publishedAt:null,rawText:title,collectedAt:"2026-08-24T06:02:32.177Z",dedupeKey:"sdream:fallback"};
+  const section=`<?xml version="1.0"?><hp:section xmlns:hp="urn:hancom:section"><hp:p><hp:run><hp:t>신청대상은 교육활동을 수행하는 비영리 기관 및 단체입니다. 선정된 기관은 교육 프로그램을 운영하고 지원금을 지급받으며 사업계획서를 제출합니다.</hp:t></hp:run></hp:p></hp:section>`;const bytes=zipSync({mimetype:strToU8("application/hwp+zip"),"Contents/section0.xml":strToU8(section)});let detailCalls=0;
+  const fetcher:typeof fetch=async(input,init)=>{if(String(input).includes("/download?"))return new Response(bytes,{headers:{"content-type":"application/vnd.hancom.hwpx"}});detailCalls++;const headers=new Headers(init?.headers);if(!headers.get("referer"))return new Response("blocked",{status:403});return new Response(`<h1>${title}</h1><a href="#null" onclick="onFileDown('FLE_FIXTURE'); return false;">2026 배움터 교육지원사업 공모요강.hwpx</a>`,{headers:{"content-type":"text/html; charset=utf-8"}});};
+  const result=await assessNoticeRelevance(notice,{...source("sdream"),url:"https://www.sdream.or.kr/main"},fetcher);assert.equal(detailCalls,2);assert.equal(result.status,"IN_SCOPE");assert.ok(result.supportTypes.includes("MONEY"));
+});
+
+test("sdream attachment fetch failure never promotes an unsupported notice",async()=>{
+  const title="2026년 배움터 교육지원사업 공모";const notice:RawNotice={sourceId:"sdream",sourceNoticeId:"BBS25000000000506387",title,url:"https://www.sdream.or.kr/w/bbs0103V?BBS_SID=BBS25000000000506387",publishedAt:null,rawText:title,collectedAt:"2026-08-24T06:02:32.177Z",dedupeKey:"sdream:attachment-failure"};
+  const fetcher:typeof fetch=async input=>String(input).includes("/download?")?new Response("failed",{status:503}):new Response(`<h1>${title}</h1><a href="#null" onclick="onFileDown('FLE_FIXTURE'); return false;">2026 배움터 교육지원사업 공모요강.pdf</a>`,{headers:{"content-type":"text/html; charset=utf-8"}});
+  const result=await assessNoticeRelevance(notice,{...source("sdream"),url:"https://www.sdream.or.kr/main"},fetcher);assert.equal(result.status,"RELEVANCE_REVIEW");assert.deepEqual(result.supportTypes,[]);
+});
