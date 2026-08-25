@@ -5,7 +5,7 @@ import type { RawNotice, SourceDefinition } from "../lib/collectors/contracts.ts
 import { persistNotice } from "../lib/collectors/persist.ts";
 import { fixtureOpportunities } from "../lib/data/fixtures.ts";
 import { toGrantViewModel } from "../lib/domain/grant-view-model.ts";
-import { normalizeSupportTypes, parseSupportTypesJson, supportTypeLabel } from "../lib/domain/support-types.ts";
+import { normalizeSupportTypes, parseSupportTypesJson, supportTypeLabel, supportTypeLabelList } from "../lib/domain/support-types.ts";
 import type { ExternalResourceType } from "../lib/domain/types.ts";
 import type { RelevanceDecision } from "../lib/relevance/classifier.ts";
 
@@ -41,6 +41,8 @@ test("support type labels have one canonical Public mapping",()=>{
   assert.equal(supportTypeLabel("MATERIAL"),"물품·교구");
   assert.equal(supportTypeLabel("PROGRAM"),"프로그램 제공");
   assert.equal(supportTypeLabel("PROFESSIONAL_SERVICE"),"전문서비스");
+  assert.deepEqual(supportTypeLabelList(["MONEY","STAFF"]),["사업비","강사·인력"]);
+  assert.deepEqual(supportTypeLabelList([]),[]);
 });
 
 test("new IN_SCOPE Opportunity persists deduplicated support types",async()=>{

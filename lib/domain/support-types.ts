@@ -1,6 +1,7 @@
 import { ExternalResourceType, type ExternalResourceType as ExternalResourceTypeValue } from "./types.ts";
 
-const canonicalSupportTypes=new Set<string>(Object.values(ExternalResourceType));
+export const supportTypeValues=Object.values(ExternalResourceType);
+const canonicalSupportTypes=new Set<string>(supportTypeValues);
 
 export const supportTypeLabels:Record<ExternalResourceTypeValue,string>={
   MONEY:"사업비",
@@ -20,3 +21,5 @@ export function parseSupportTypesJson(value:string|null|undefined):ExternalResou
 }
 
 export function supportTypeLabel(type:ExternalResourceTypeValue){return supportTypeLabels[type];}
+
+export function supportTypeLabelList(types:readonly ExternalResourceTypeValue[]){return types.map(supportTypeLabel);}

@@ -1,15 +1,28 @@
 import type { GrantViewModel } from "./types.ts";
 import { categoryTaxonomy, facilityTaxonomy } from "./grant-view-model.ts";
+import { supportTypeLabel, supportTypeValues } from "./support-types.ts";
+import type { ExternalResourceType } from "./types.ts";
 
 export const explorerRegions=["전체","경기","서울","전국","확인 필요"] as const;
 export const explorerStatuses=["접수중","마감임박","예정","일정 확인 필요"] as const;
-export type ExplorerFilterState={search:string;region:string;facility:string[];category:string[];status:string[]};
+export type ExplorerFilterState={search:string;region:string;facility:string[];category:string[];status:string[];support:ExternalResourceType[]};
+export type ExplorerFilterChip={key:"search"|"region"|"facility"|"category"|"status"|"support";value:string;label:string};
 export type ExplorerSort="deadline"|"recent";
-export const emptyExplorerFilters:ExplorerFilterState={search:"",region:"전체",facility:[],category:[],status:[]};
+export const emptyExplorerFilters:ExplorerFilterState={search:"",region:"전체",facility:[],category:[],status:[],support:[]};
 
-export function parseExplorerQuery(search:string):ExplorerFilterState{const query=new URLSearchParams(search);const valid=(key:string,values:readonly string[])=>query.getAll(key).filter(value=>values.includes(value));const region=query.get("region")??"전체";return{search:query.get("q")??"",region:explorerRegions.includes(region as typeof explorerRegions[number])?region:"전체",facility:valid("facility",facilityTaxonomy),category:valid("category",categoryTaxonomy),status:valid("status",explorerStatuses)};}
-export function serializeExplorerQuery(filters:ExplorerFilterState){const query=new URLSearchParams();if(filters.search.trim())query.set("q",filters.search.trim());if(filters.region!=="전체")query.set("region",filters.region);filters.facility.forEach(value=>query.append("facility",value));filters.category.forEach(value=>query.append("category",value));filters.status.forEach(value=>query.append("status",value));return query.toString();}
-export function matchesExplorerFilters(grant:GrantViewModel,state:ExplorerFilterState){const query=state.search.trim().toLocaleLowerCase("ko-KR");const searchMatch=!query||grant.title.toLocaleLowerCase("ko-KR").includes(query)||grant.organization.toLocaleLowerCase("ko-KR").includes(query);const regionMatch=state.region==="전체"||grant.eligibleRegion===state.region||(state.region!=="전국"&&state.region!=="확인 필요"&&grant.eligibleRegion==="전국");return searchMatch&&regionMatch&&(!state.facility.length||state.facility.some(value=>grant.facilityTypes.includes(value)))&&(!state.category.length||state.category.includes(grant.field))&&(!state.status.length||state.status.includes(grant.status));}
+export function parseExplorerQuery(search:string):ExplorerFilterState{const query=new URLSearchParams(search);const valid=(key:string,values:readonly string[])=>[...new Set(query.getAll(key).filter(value=>values.includes(value)))];const region=query.get("region")??"전체";const requestedSupport=new Set(query.getAll("support"));return{search:query.get("q")??"",region:explorerRegions.includes(region as typeof explorerRegions[number])?region:"전체",facility:valid("facility",facilityTaxonomy),category:valid("category",categoryTaxonomy),status:valid("status",explorerStatuses),support:supportTypeValues.filter(value=>requestedSupport.has(value))};}
+export function serializeExplorerQuery(filters:ExplorerFilterState){const query=new URLSearchParams();if(filters.search.trim())query.set("q",filters.search.trim());if(filters.region!=="전체")query.set("region",filters.region);filters.facility.forEach(value=>query.append("facility",value));filters.category.forEach(value=>query.append("category",value));filters.status.forEach(value=>query.append("status",value));supportTypeValues.filter(value=>filters.support.includes(value)).forEach(value=>query.append("support",value));return query.toString();}
+export function matchesExplorerFilters(grant:GrantViewModel,state:ExplorerFilterState){const query=state.search.trim().toLocaleLowerCase("ko-KR");const searchMatch=!query||grant.title.toLocaleLowerCase("ko-KR").includes(query)||grant.organization.toLocaleLowerCase("ko-KR").includes(query);const regionMatch=state.region==="전체"||grant.eligibleRegion===state.region||(state.region!=="전국"&&state.region!=="확인 필요"&&grant.eligibleRegion==="전국");return searchMatch&&regionMatch&&(!state.facility.length||state.facility.some(value=>grant.facilityTypes.includes(value)))&&(!state.category.length||state.category.includes(grant.field))&&(!state.status.length||state.status.includes(grant.status))&&(!state.support.length||state.support.some(value=>grant.supportTypes.includes(value)));}
+
+export function explorerFilterChips(filters:ExplorerFilterState):ExplorerFilterChip[]{return[
+  ...(filters.search?[{key:"search" as const,value:filters.search,label:`검색: ${filters.search}`}]:[]),
+  ...(filters.region!=="전체"?[{key:"region" as const,value:filters.region,label:filters.region}]:[]),
+  ...filters.facility.map(value=>({key:"facility" as const,value,label:value})),
+  ...filters.category.map(value=>({key:"category" as const,value,label:value})),
+  ...filters.status.map(value=>({key:"status" as const,value,label:value})),
+  ...filters.support.map(value=>({key:"support" as const,value,label:supportTypeLabel(value)})),
+];}
+export function removeExplorerFilterChip(filters:ExplorerFilterState,chip:ExplorerFilterChip):ExplorerFilterState{if(chip.key==="search")return{...filters,search:""};if(chip.key==="region")return{...filters,region:"전체"};return{...filters,[chip.key]:filters[chip.key].filter(value=>value!==chip.value)};}
 
 export function sortExplorerGrants(grants:GrantViewModel[],sort:ExplorerSort){
   if(sort==="deadline")return grants;
