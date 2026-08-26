@@ -1,4 +1,5 @@
-import { ReviewStatus, type ReviewStatus as ReviewStatusValue } from "../domain/types.ts";
+import { DeadlineMode, ReviewStatus, type DeadlineMode as DeadlineModeValue, type ReviewStatus as ReviewStatusValue } from "../domain/types.ts";
+import { openEndedDeadlineLabel } from "../domain/verification.ts";
 
 const TELEGRAM_API_ORIGIN="https://api.telegram.org";
 const PRODUCTION_SITE_ORIGIN="https://youthgrant.seoeum1711.workers.dev";
@@ -15,6 +16,8 @@ export type FinalizedOpportunityNotification={
   title:string;
   organization:string;
   deadline?:string|null;
+  deadlineMode?:DeadlineModeValue|string;
+  deadlineEvidence?:string|null;
   eligibleRegion?:string|null;
   reviewReason?:string|null;
 };
@@ -24,7 +27,8 @@ function clean(value:string|undefined|null,maxLength:number,fallback:string){con
 function siteUrl(config:TelegramNotificationConfig,path:string){const origin=config.siteOrigin?.trim()||PRODUCTION_SITE_ORIGIN;return new URL(`/${path.replace(/^\/+/,"")}`,origin).toString();}
 function messageFor(input:FinalizedOpportunityNotification,config:TelegramNotificationConfig){
   const title=clean(input.title,300,"제목 확인 필요");const organization=clean(input.organization,200,"기관 확인 필요");
-  if(input.reviewStatus===ReviewStatus.PUBLISHED)return{text:`[YouthGrant 신규 공모]\n\n${title}\n${organization}\n\n상태: 공개 가능\n마감: ${clean(input.deadline,100,"확인 필요")}\n지원지역: ${clean(input.eligibleRegion,100,"확인 필요")}`,buttonText:"YouthGrant에서 보기",buttonUrl:siteUrl(config,`grants/${encodeURIComponent(input.opportunityId)}`)};
+  const deadline=input.deadlineMode===DeadlineMode.OPEN_ENDED?openEndedDeadlineLabel(input.deadlineEvidence):clean(input.deadline,100,"확인 필요");
+  if(input.reviewStatus===ReviewStatus.PUBLISHED)return{text:`[YouthGrant 신규 공모]\n\n${title}\n${organization}\n\n상태: 공개 가능\n마감: ${deadline}\n지원지역: ${clean(input.eligibleRegion,100,"확인 필요")}`,buttonText:"YouthGrant에서 보기",buttonUrl:siteUrl(config,`grants/${encodeURIComponent(input.opportunityId)}`)};
   if(input.reviewStatus===ReviewStatus.REVIEW_REQUIRED)return{text:`[YouthGrant 검토 필요]\n\n${title}\n${organization}\n\n${clean(input.reviewReason,500,"핵심 데이터 근거 확인 필요")}`,buttonText:"Ops에서 검토하기",buttonUrl:siteUrl(config,`ops/review/${encodeURIComponent(input.opportunityId)}`)};
   return null;
 }

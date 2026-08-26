@@ -1,5 +1,5 @@
-import { eligibilityPresentation, safeValue, verifiedDeadline } from "./verification.ts";
-import type { GrantViewModel, Opportunity } from "./types.ts";
+import { eligibilityPresentation, openEndedDeadlineLabel, safeValue, verifiedDeadline, verifiedOpenEnded } from "./verification.ts";
+import { DeadlineMode, type GrantViewModel, type Opportunity } from "./types.ts";
 
 const KST = "Asia/Seoul";
 function formatDate(value:string) { const parts=new Intl.DateTimeFormat("ko-KR",{timeZone:KST,month:"2-digit",day:"2-digit"}).formatToParts(new Date(value));const month=parts.find(part=>part.type==="month")?.value??"";const day=parts.find(part=>part.type==="day")?.value??"";return `${month}.${day}`; }
@@ -46,8 +46,11 @@ export function normalizeFacilityTypes(values:string[]){
   return normalized.size?[...normalized]:["확인 필요"];
 }
 
+export function grantStatusLabel(grant:Pick<GrantViewModel,"deadlineMode"|"status">){return grant.deadlineMode===DeadlineMode.OPEN_ENDED&&grant.status==="접수중"?"모집중":grant.status;}
+
 export function toGrantViewModel(opportunity:Opportunity, now=new Date()):GrantViewModel {
   const deadline=verifiedDeadline(opportunity);
+  const openEnded=verifiedOpenEnded(opportunity);
   const eligibility=eligibilityPresentation(opportunity.eligibilityVerification);
   const facilityTypes=normalizeFacilityTypes(opportunity.facilityTypes);
   const eligibilityLabel=eligibility.tone==="verified"&&!facilityTypes.some(value=>/(수련관|문화의집|수련원|특화시설|야영장)/.test(value))?"신청 가능":eligibility.label;
@@ -58,18 +61,21 @@ export function toGrantViewModel(opportunity:Opportunity, now=new Date()):GrantV
     else if(diff<0){status="마감";statusTone="closed";}
     else if(diff<=14){status="마감임박";statusTone="soon";dDay=`D-${diff}`;}
     else{status="접수중";statusTone="open";dDay=`D-${diff}`;}
+  }else if(openEnded){
+    if(opportunity.applicationStart&&new Date(opportunity.applicationStart)>now){status="예정";statusTone="plan";}
+    else{status="접수중";statusTone="open";}
   }
-  const dateLabel=deadline?formatDate(opportunity.deadline!):"확인 필요";
+  const dateLabel=deadline?formatDate(opportunity.deadline!):openEnded?openEndedDeadlineLabel(opportunity.deadlineEvidence):"확인 필요";
   return {
     id:opportunity.id,title:opportunity.title,organization:opportunity.organization,sourceName:opportunity.sourceName,sourceMethod:opportunity.sourceMethod,sourceUrl:opportunity.sourceUrl,
-    region:opportunity.region,eligibleRegion:resolveEligibleRegion(opportunity),facilityTypes,supportTypes:opportunity.supportTypes,field:normalizeField(opportunity.field),status,statusTone,dDay,dateLabel,
-    applicationPeriod:deadline?`${opportunity.applicationStart?formatDate(opportunity.applicationStart):"접수 시작 확인 필요"} – ${dateLabel}`:"신청 마감 · 확인 필요",
+    region:opportunity.region,eligibleRegion:resolveEligibleRegion(opportunity),facilityTypes,supportTypes:opportunity.supportTypes,field:normalizeField(opportunity.field),deadlineMode:opportunity.deadlineMode,status,statusTone,dDay,dateLabel,
+    applicationPeriod:deadline||openEnded?`${opportunity.applicationStart?formatDate(opportunity.applicationStart):"접수 시작 확인 필요"} – ${dateLabel}`:"신청 마감 · 확인 필요",
     eligibilityLabel,eligibilityTone:eligibility.tone,
     evidenceText:opportunity.eligibilityEvidence??"자격조건을 자동으로 확정할 근거가 확인되지 않았습니다.",
     evidenceLocation:opportunity.eligibilityEvidenceLocation??"근거 위치 · 확인 필요",evidenceVerified:eligibility.tone==="verified",evidenceMatchRange:opportunity.eligibilityMatchRange??null,
     amountLabel:amount(opportunity.amountWon,opportunity.amountText),selfBurdenLabel:safeValue(opportunity.selfBurden),supportDetails:safeValue(opportunity.supportDetails),
     checks:[
-      {label:"신청 마감일",state:deadline?"verified":"unknown",message:deadline?"날짜 확인 완료 · 신청기간 문맥에서 확인":"확인 필요 · 검증된 신청 마감 문맥 없음"},
+      {label:"신청 마감일",state:deadline||openEnded?"verified":"unknown",message:deadline?"날짜 확인 완료 · 신청기간 문맥에서 확인":openEnded?`종료 조건 확인 완료 · ${dateLabel}`:"확인 필요 · 검증된 신청 마감 문맥 없음"},
       {label:"신청자격",state:eligibility.tone==="verified"?"verified":"unknown",message:eligibilityLabel},
       {label:"지원금",state:opportunity.amountWon!==null||!!opportunity.amountText?"verified":"unknown",message:opportunity.amountWon!==null||!!opportunity.amountText?"본문 기준":"확인 필요"},
       {label:"자부담",state:opportunity.selfBurden?"verified":"unknown",message:opportunity.selfBurden?"본문 기준":"확인 필요 · 첨부파일 확인 권장"},
@@ -80,6 +86,6 @@ export function toGrantViewModel(opportunity:Opportunity, now=new Date()):GrantV
 export function toPublicGrantList(rows:Opportunity[],now=new Date()){
   return rows
     .filter(row=>row.reviewStatus==="PUBLISHED"||row.reviewStatus==="CONFIRMED")
-    .filter(row=>{const deadline=verifiedDeadline(row);return !deadline||deadline>=now;})
+    .filter(row=>{const deadline=verifiedDeadline(row);return verifiedOpenEnded(row)||!deadline||deadline>=now;})
     .map(row=>toGrantViewModel(row,now));
 }

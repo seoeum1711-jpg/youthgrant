@@ -19,6 +19,9 @@ export type RelevanceStatus = (typeof RelevanceStatus)[keyof typeof RelevanceSta
 export const ExternalResourceType = { MONEY:"MONEY", STAFF:"STAFF", MATERIAL:"MATERIAL", PROGRAM:"PROGRAM", PROFESSIONAL_SERVICE:"PROFESSIONAL_SERVICE" } as const;
 export type ExternalResourceType = (typeof ExternalResourceType)[keyof typeof ExternalResourceType];
 
+export const DeadlineMode = { FIXED_DATE:"FIXED_DATE", OPEN_ENDED:"OPEN_ENDED", UNKNOWN:"UNKNOWN" } as const;
+export type DeadlineMode = (typeof DeadlineMode)[keyof typeof DeadlineMode];
+
 export type Opportunity = {
   id:string;
   dedupeKey:string;
@@ -35,6 +38,7 @@ export type Opportunity = {
   field:string|null;
   applicationStart:string|null;
   deadline:string|null;
+  deadlineMode:DeadlineMode;
   deadlineVerification:Verification;
   deadlineEvidence:string|null;
   deadlineEvidenceLocation:string|null;
@@ -53,6 +57,7 @@ export type Opportunity = {
 export type GrantViewModel = {
   id:string; title:string; organization:string; sourceName:string; sourceMethod:string; sourceUrl:string;
   region:string; eligibleRegion:string; facilityTypes:string[]; supportTypes:ExternalResourceType[]; field:string;
+  deadlineMode:DeadlineMode;
   status:"접수중"|"마감임박"|"예정"|"일정 확인 필요"|"마감";
   statusTone:"open"|"soon"|"plan"|"check"|"closed";
   dDay:string|null; dateLabel:string; applicationPeriod:string;

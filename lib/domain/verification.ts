@@ -1,4 +1,4 @@
-import { Verification, type Opportunity } from "./types.ts";
+import { DeadlineMode, Verification, type Opportunity } from "./types.ts";
 
 const DEADLINE_CONTEXT = /(신청\s*기간|접수\s*기간|신청\s*마감|접수\s*마감|제출\s*기한)/;
 const NON_DEADLINE_CONTEXT = /(행사일|교육일|사업\s*기간|발표일|설명회)/;
@@ -8,9 +8,22 @@ export function mayVerifyDeadline(context:string):boolean {
 }
 
 export function verifiedDeadline(opportunity:Opportunity):Date|null {
-  if ((opportunity.deadlineVerification!==Verification.VERIFIED&&opportunity.deadlineVerification!==Verification.MANUAL_CONFIRMED) || !opportunity.deadline) return null;
+  if (opportunity.deadlineMode!==DeadlineMode.FIXED_DATE||(opportunity.deadlineVerification!==Verification.VERIFIED&&opportunity.deadlineVerification!==Verification.MANUAL_CONFIRMED) || !opportunity.deadline) return null;
   const date = new Date(opportunity.deadline);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function verifiedOpenEnded(opportunity:Pick<Opportunity,"deadlineMode"|"deadlineVerification">):boolean {
+  return opportunity.deadlineMode===DeadlineMode.OPEN_ENDED&&(opportunity.deadlineVerification===Verification.VERIFIED||opportunity.deadlineVerification===Verification.MANUAL_CONFIRMED);
+}
+
+export function openEndedDeadlineLabel(evidence:string|null|undefined):string {
+  const value=evidence??"";
+  if(/예산\s*소진\s*시/.test(value))return "예산 소진 시까지";
+  if(/사업비\s*소진\s*시/.test(value))return "사업비 소진 시까지";
+  if(/정원\s*마감\s*시/.test(value))return "정원 마감 시까지";
+  if(/선착순/.test(value))return "선착순 마감";
+  return "모집완료 시까지";
 }
 
 export function eligibilityPresentation(status:Opportunity["eligibilityVerification"]) {

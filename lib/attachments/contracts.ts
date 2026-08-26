@@ -26,7 +26,9 @@ export type ExtractionArtifact={version:"attachment-v1";attachmentId:string;file
 
 export type AttachmentEvidence={
   field:"deadline"|"eligibility"|"amount"|"self_burden";
-  value:string|string[]|number;
+  value:string|string[]|number|null;
+  deadlineMode?:DeadlineMode;
+  applicationStart?:string|null;
   evidenceText:string;
   attachmentId:string;
   filename:string;
@@ -36,3 +38,4 @@ export type AttachmentEvidence={
 };
 
 export type AttachmentProcessResult={status:AttachmentParseStatus;format:AttachmentFormat;parseMethod:string;artifact:ExtractionArtifact|null;children?:{filename:string;bytes:Uint8Array}[];errorCode?:string;errorMessage?:string};
+import type { DeadlineMode } from "../domain/types.ts";

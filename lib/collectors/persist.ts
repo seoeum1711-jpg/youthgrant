@@ -1,5 +1,5 @@
 import type { D1DatabaseLike } from "../cloudflare.ts";
-import { Verification, ReviewStatus } from "../domain/types.ts";
+import { DeadlineMode, Verification, ReviewStatus } from "../domain/types.ts";
 import { dedupeNotices } from "./dedupe.ts";
 import { sourceRegistry } from "./registry.ts";
 import type { Collector, CrawlRunResult, RawNotice, SourceDefinition, SourceRunResult } from "./contracts.ts";
@@ -90,9 +90,9 @@ export async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:So
   if(!preserveManual&&shouldCreateOpportunity(relevance.status)){
     let targetOpportunityId=linkedOpportunityId??opportunityId;
     if(!linkedOpportunityId){const opportunityInsert=await db.prepare(`INSERT OR IGNORE INTO opportunities
-      (id,dedupe_key,title,organization,region,field,facility_types_json,support_types_json,application_start,deadline,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),supportTypesJson,null,null,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.PENDING,notice.publishedAt,notice.collectedAt).run();
+      (id,dedupe_key,title,organization,region,field,facility_types_json,support_types_json,application_start,deadline,deadline_mode,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),supportTypesJson,null,null,DeadlineMode.UNKNOWN,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.PENDING,notice.publishedAt,notice.collectedAt).run();
       opportunityCreated=changes(opportunityInsert)>0;targetOpportunityId=opportunityId;
     }
     if(linkedOpportunityId&&!preserveSupportTypes)await db.prepare("UPDATE opportunities SET support_types_json=?,updated_at=? WHERE id=?").bind(supportTypesJson,notice.collectedAt,linkedOpportunityId).run();

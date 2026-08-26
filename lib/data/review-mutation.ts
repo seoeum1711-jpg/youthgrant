@@ -1,5 +1,5 @@
 import type { D1DatabaseLike } from "../cloudflare.ts";
-import { ReviewStatus, Verification } from "../domain/types.ts";
+import { DeadlineMode, ReviewStatus, Verification } from "../domain/types.ts";
 
 const REVIEW_STATUSES=[ReviewStatus.CONFIRMED,ReviewStatus.DEFERRED,ReviewStatus.EXCLUDED] as const;
 const DEADLINE_DECISIONS=["CONFIRMED","UNKNOWN"] as const;
@@ -34,11 +34,12 @@ export function parseReviewMutation(value:unknown):ReviewMutation{
 export async function applyOpportunityReview(db:D1DatabaseLike,id:string,input:ReviewMutation){
   const current=await db.prepare("SELECT id,deadline_evidence,deadline_evidence_location,eligibility_evidence,eligibility_evidence_location FROM opportunities WHERE id=? AND review_status IN ('REVIEW_REQUIRED','DEFERRED')").bind(id).first<{id:string;deadline_evidence:string|null;deadline_evidence_location:string|null;eligibility_evidence:string|null;eligibility_evidence_location:string|null}>();if(!current)return false;
   const now=new Date().toISOString();const deadline=input.deadline.decision==="CONFIRMED"?input.deadline.value:null;const deadlineVerification=input.deadline.decision==="CONFIRMED"?Verification.MANUAL_CONFIRMED:Verification.UNKNOWN;
+  const deadlineMode=input.deadline.decision==="CONFIRMED"?DeadlineMode.FIXED_DATE:DeadlineMode.UNKNOWN;
   const eligibilityVerification=input.eligibility.decision==="ELIGIBLE"?Verification.MANUAL_CONFIRMED:input.eligibility.decision==="INELIGIBLE"?Verification.MANUAL_REJECTED:Verification.UNKNOWN;
   const facilities=input.eligibility.facilityTypes?.length?input.eligibility.facilityTypes:["기타 / 확인 필요"];
   const amountWon=input.amount.decision==="CONFIRMED"?input.amount.won??null:null;const amountText=input.amount.decision==="CONFIRMED"?input.amount.text??null:null;
   const selfBurden=input.selfBurden.decision==="NONE"?"없음":input.selfBurden.decision==="PRESENT"?input.selfBurden.value??null:null;
   const deadlineEvidence=input.deadline.decision==="CONFIRMED"?manualEvidence(current.deadline_evidence,`신청 마감 ${input.deadline.value}`):current.deadline_evidence;const eligibilityEvidence=input.eligibility.decision!=="UNKNOWN"?manualEvidence(current.eligibility_evidence,input.eligibility.note!):current.eligibility_evidence;
-  await db.prepare(`UPDATE opportunities SET deadline=?,deadline_verification=?,deadline_evidence=?,deadline_evidence_location=?,eligibility_verification=?,eligibility_evidence=?,eligibility_evidence_location=?,facility_types_json=?,amount_won=?,amount_text=?,self_burden=?,review_status=?,updated_at=? WHERE id=?`)
-    .bind(deadline,deadlineVerification,deadlineEvidence,audit(current.deadline_evidence_location,now),eligibilityVerification,eligibilityEvidence,audit(current.eligibility_evidence_location,now),JSON.stringify(facilities),amountWon,amountText,selfBurden,input.reviewStatus,now,id).run();return true;
+  await db.prepare(`UPDATE opportunities SET deadline=?,deadline_mode=?,deadline_verification=?,deadline_evidence=?,deadline_evidence_location=?,eligibility_verification=?,eligibility_evidence=?,eligibility_evidence_location=?,facility_types_json=?,amount_won=?,amount_text=?,self_burden=?,review_status=?,updated_at=? WHERE id=?`)
+    .bind(deadline,deadlineMode,deadlineVerification,deadlineEvidence,audit(current.deadline_evidence_location,now),eligibilityVerification,eligibilityEvidence,audit(current.eligibility_evidence_location,now),JSON.stringify(facilities),amountWon,amountText,selfBurden,input.reviewStatus,now,id).run();return true;
 }
