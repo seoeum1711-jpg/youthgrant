@@ -55,6 +55,20 @@ test("institutional resource bundles outrank contextual participation exclusions
   assert.equal(personal.status,"OUT_OF_SCOPE");assert.deepEqual(personal.supportTypes,[]);
 });
 
+test("program manuals do not become MATERIAL without a distinct supplied resource",()=>{
+  const manual=classify("우수 프로그램 보급 참여기관 모집","신청대상은 청소년수련시설입니다. 선정 기관이 현장에서 운영할 수 있도록 프로그램 운영 매뉴얼을 무상 제공합니다.");
+  assert.equal(manual.status,"IN_SCOPE");assert.deepEqual(manual.supportTypes,["PROGRAM"]);
+
+  const manualAndKit=classify("우수 프로그램 보급 참여기관 모집","신청대상은 청소년수련시설입니다. 선정 기관이 현장에서 운영할 수 있도록 프로그램 운영 매뉴얼과 활동 키트를 제공합니다.");
+  assert.equal(manualAndKit.status,"IN_SCOPE");assert.deepEqual(manualAndKit.supportTypes,["MATERIAL","PROGRAM"]);
+
+  const learningMaterials=classify("청소년시설 교육자원 지원","신청대상은 청소년수련시설입니다. 선정 시설에 교육자료와 교구를 제공하여 기관 프로그램 운영에 활용합니다.");
+  assert.equal(learningMaterials.status,"IN_SCOPE");assert.ok(learningMaterials.supportTypes.includes("MATERIAL"));
+
+  const guideline=classify("청소년시설 사업 운영 안내","신청대상은 청소년수련시설입니다. 선정 기관에 사업 운영 지침을 제공합니다.");
+  assert.equal(guideline.supportTypes.includes("MATERIAL"),false);
+});
+
 test("known participant, education, event and cooperation noise is OUT_OF_SCOPE",()=>{
   const cases=[
     ["청소년 디지털 성평등 교육 참가기관 추가 모집","교육 참여를 희망하는 학교와 청소년기관을 모집합니다. 참가 기관은 무료 강의 영상을 시청합니다."],
