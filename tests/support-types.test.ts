@@ -9,12 +9,12 @@ import { normalizeSupportTypes, parseSupportTypesJson, supportTypeLabel, support
 import type { ExternalResourceType } from "../lib/domain/types.ts";
 import type { RelevanceDecision } from "../lib/relevance/classifier.ts";
 
-type Existing={id:string;relevance_status:string;opportunity_id:string|null;review_status:string|null};
+type Existing={id:string;relevance_status:string;opportunity_id:string|null;review_status:string|null;dedupe_key?:string;url?:string};
 type Write={query:string;values:unknown[]};
 
-function fakeDb(existing:Existing|null=null){
+function fakeDb(existing:Existing|null=null,identityOpportunity:{opportunity_id:string;review_status:string}|null=null){
   const writes:Write[]=[];
-  const db={prepare(query:string){let values:unknown[]=[];return{bind(...next:unknown[]){values=next;return this;},async first(){return query.startsWith("SELECT rn.id")?existing:null;},async all(){return{results:[]};},async run(){writes.push({query,values});const inserted=query.includes("INSERT OR IGNORE INTO opportunities")&&!existing?.opportunity_id;return{meta:{changes:inserted?1:query.includes("INSERT OR IGNORE INTO opportunities")?0:1}};}};}} as unknown as D1DatabaseLike;
+  const db={prepare(query:string){let values:unknown[]=[];return{bind(...next:unknown[]){values=next;return this;},async first(){if(query.startsWith("SELECT rn.id"))return existing;if(query.startsWith("SELECT o.id AS opportunity_id"))return identityOpportunity;return null;},async all(){return{results:[]};},async run(){writes.push({query,values});const inserted=query.includes("INSERT OR IGNORE INTO opportunities")&&!existing?.opportunity_id&&!identityOpportunity;return{meta:{changes:inserted?1:query.includes("INSERT OR IGNORE INTO opportunities")?0:1}};}};}} as unknown as D1DatabaseLike;
   return{db,writes};
 }
 
@@ -56,6 +56,28 @@ test("matched automatic Opportunity refreshes support types while manual rows pr
   const first=fakeDb(automatic);await persistNotice(first.db,notice,source,"run-2",decision(["PROFESSIONAL_SERVICE"]));
   assert.ok(first.writes.some(write=>write.query.startsWith("UPDATE opportunities SET support_types_json")&&write.values[0]==='["PROFESSIONAL_SERVICE"]'));
   for(const review_status of ["CONFIRMED","DEFERRED","EXCLUDED"]){const manual=fakeDb({...automatic,review_status});await persistNotice(manual.db,notice,source,"run-3",decision(["MATERIAL"]));assert.ok(!manual.writes.some(write=>write.query.startsWith("UPDATE opportunities SET support_types_json")),review_status);}
+});
+
+test("persistence reuses source notice identity and prevents duplicate opportunities",async()=>{
+  const canonicalExisting:Existing={id:"raw-canonical",relevance_status:"OUT_OF_SCOPE",opportunity_id:null,review_status:null,dedupe_key:"support-source:old-url",url:"https://example.com/old?item=1"};
+  const first=fakeDb(canonicalExisting);const firstResult=await persistNotice(first.db,{...notice,url:"https://example.com/new?item=1",dedupeKey:"support-source:new-url"},source,"run-canonical",decision(["MONEY"]));
+  assert.equal(firstResult.state,"MATCHED");assert.ok(!first.writes.some(write=>write.query.startsWith("INSERT INTO raw_notices")));assert.equal(first.writes.filter(write=>write.query.includes("INSERT OR IGNORE INTO opportunities")).length,1);
+
+  const matched:Existing={...canonicalExisting,relevance_status:"IN_SCOPE",opportunity_id:"opp-existing",review_status:"REVIEW_REQUIRED"};
+  const repeat=fakeDb(matched);await persistNotice(repeat.db,{...notice,dedupeKey:"support-source:another-url"},source,"run-repeat",decision(["MONEY"]));
+  assert.ok(!repeat.writes.some(write=>write.query.includes("INSERT OR IGNORE INTO opportunities")));
+
+  const collision=fakeDb(canonicalExisting,{opportunity_id:"opp-on-duplicate-raw",review_status:"REVIEW_REQUIRED"});await persistNotice(collision.db,notice,source,"run-collision",decision(["PROGRAM"]));
+  assert.ok(!collision.writes.some(write=>write.query.includes("INSERT OR IGNORE INTO opportunities")));
+  const link=collision.writes.find(write=>write.query.includes("INSERT OR IGNORE INTO opportunity_sources"));assert.equal(link?.values[0],"opp-on-duplicate-raw");
+});
+
+test("canonical identity guard never overwrites manual review states",async()=>{
+  for(const review_status of ["CONFIRMED","DEFERRED","EXCLUDED"]){
+    const existing:Existing={id:"raw-manual",relevance_status:"IN_SCOPE",opportunity_id:"opp-manual",review_status,dedupe_key:notice.dedupeKey,url:notice.url};
+    const fixture=fakeDb(existing);await persistNotice(fixture.db,notice,source,"run-manual",{...decision([]),status:"OUT_OF_SCOPE"});
+    assert.ok(!fixture.writes.some(write=>write.query.startsWith("UPDATE opportunities SET review_status='EXCLUDED'")),review_status);
+  }
 });
 
 test("GrantViewModel receives canonical support types without changing Public filters",()=>{

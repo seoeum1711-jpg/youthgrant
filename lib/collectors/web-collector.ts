@@ -26,14 +26,15 @@ const YOUTH_SOURCE_IDS=new Set(["kywa","ggyouth","ggyouthnet"]);
 const YOUTH_NOTICE_HINT=/(공모|모집|지원사업|참여.{0,20}(?:기관|시설)|(?:기관|시설).{0,20}(?:신청|접수)|신청\s*안내)/;
 function dateNear(html:string,index:number){const context=html.slice(index,Math.min(html.length,index+1600));const value=context.match(/20\d{2}[.\-/]\d{1,2}[.\-/]\d{1,2}/)?.[0];if(!value)return null;const [year,month,day]=value.split(/[.\-/]/).map(Number);return new Date(Date.UTC(year,month-1,day)).toISOString();}
 function noticeId(url:string){try{const parsed=new URL(url);return parsed.searchParams.get("no")??parsed.searchParams.get("idx")??parsed.searchParams.get("wr_id");}catch{return null;}}
+function canonicalYouthNoticeUrl(source:SourceDefinition,url:string){const id=noticeId(url);if(source.id!=="kywa"||!id)return url;const canonical=new URL("/pressinfo/notice_view.jsp",source.url);canonical.searchParams.set("no",id);return canonical.toString();}
 
 export class YouthBoardCollector implements Collector{
-  source:SourceDefinition;parserVersion="v4-youth-board-1";lastHttpStatus:number|null=null;private fetcher:typeof fetch;
+  source:SourceDefinition;parserVersion="v4-youth-board-2";lastHttpStatus:number|null=null;private fetcher:typeof fetch;
   constructor(source:SourceDefinition,fetcher:typeof fetch=fetch){if(!YOUTH_SOURCE_IDS.has(source.id))throw new Error(`Unsupported youth board source: ${source.id}`);this.source=source;this.fetcher=fetcher;}
   async collect(signal?:AbortSignal):Promise<RawNotice[]>{
     let response:Response;try{response=await fetchWithPolicy(this.source.url,{signal,headers:{"user-agent":"YouthGrant-Public-Beta/4.0 (+https://youthgrant.seoeum1711.workers.dev)"}},{fetcher:this.fetcher});}catch(error){if(error instanceof FetchPolicyError)this.lastHttpStatus=error.status;throw error;}this.lastHttpStatus=response.status;
     const charset=response.headers.get("content-type")?.match(/charset=([^;\s]+)/i)?.[1]??"utf-8";const encoding=/euc-?kr|ks_c_5601/i.test(charset)?"euc-kr":"utf-8";const html=new TextDecoder(encoding).decode(await response.arrayBuffer());const collectedAt=new Date().toISOString();const results:RawNotice[]=[];const seen=new Set<string>();
-    const add=(title:string,url:string,index:number)=>{title=decode(title);if(title.length<8||title.length>180||!YOUTH_NOTICE_HINT.test(title)||seen.has(url))return;seen.add(url);results.push({sourceId:this.source.id,sourceNoticeId:noticeId(url),title,url,publishedAt:dateNear(html,index),rawText:title,collectedAt,dedupeKey:makeDedupeKey(this.source.id,title,url)});};
+    const add=(title:string,url:string,index:number)=>{title=decode(title);url=canonicalYouthNoticeUrl(this.source,url);const sourceNoticeId=noticeId(url);const identity=sourceNoticeId?`${this.source.id}:${sourceNoticeId}`:url;if(title.length<8||title.length>180||!YOUTH_NOTICE_HINT.test(title)||seen.has(identity))return;seen.add(identity);results.push({sourceId:this.source.id,sourceNoticeId,title,url,publishedAt:dateNear(html,index),rawText:title,collectedAt,dedupeKey:makeDedupeKey(this.source.id,title,url)});};
     if(this.source.id==="ggyouth"){
       for(const match of html.matchAll(/<a\b(?=[^>]*\bdata-view\b)(?=[^>]*\bidx=["']?(\d+)["']?)(?=[^>]*\batchFileId=["']([^"']*)["'])[^>]*>([\s\S]*?)<\/a>/gi)){const idx=match[1];const file=match[2];add(match[3],absolute(this.source.url,`/07_openYard/noticeView.do?idx=${encodeURIComponent(idx)}&atchFileId=${encodeURIComponent(file)}`),match.index);}
     }else{

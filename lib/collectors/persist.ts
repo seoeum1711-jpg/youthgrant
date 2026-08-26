@@ -47,14 +47,35 @@ async function releaseLock(db:D1DatabaseLike,holder:string){await db.prepare("DE
 
 function inferField(title:string){if(/문화|예술/.test(title))return "문화·예술";if(/안전|보호/.test(title))return "안전·보호";if(/국제|교류/.test(title))return "국제교류";if(/진로|창업/.test(title))return "진로·창업";return "청소년 활동";}
 export function shouldCreateOpportunity(relevanceStatus:RelevanceDecision["status"]){return relevanceStatus==="IN_SCOPE";}
+type ExistingNotice={id:string;relevance_status:string;dedupe_key:string;url:string;opportunity_id:string|null;review_status:string|null};
+type ExistingOpportunity={opportunity_id:string;review_status:string};
+async function findExistingNotice(db:D1DatabaseLike,notice:RawNotice){
+  const sourceNoticeId=notice.sourceNoticeId?.trim();
+  if(sourceNoticeId)return db.prepare(`SELECT rn.id,rn.relevance_status,rn.dedupe_key,rn.url,o.id AS opportunity_id,o.review_status
+    FROM raw_notices rn LEFT JOIN opportunity_sources os ON os.raw_notice_id=rn.id AND os.is_primary=1
+    LEFT JOIN opportunities o ON o.id=os.opportunity_id WHERE rn.source_id=? AND rn.source_notice_id=?
+    ORDER BY CASE WHEN rn.dedupe_key=? THEN 0 ELSE 1 END,length(rn.url),rn.id LIMIT 1`).bind(notice.sourceId,sourceNoticeId,notice.dedupeKey).first<ExistingNotice>();
+  return db.prepare(`SELECT rn.id,rn.relevance_status,rn.dedupe_key,rn.url,o.id AS opportunity_id,o.review_status
+    FROM raw_notices rn LEFT JOIN opportunity_sources os ON os.raw_notice_id=rn.id AND os.is_primary=1
+    LEFT JOIN opportunities o ON o.id=os.opportunity_id WHERE rn.dedupe_key=? LIMIT 1`).bind(notice.dedupeKey).first<ExistingNotice>();
+}
+async function findIdentityOpportunity(db:D1DatabaseLike,notice:RawNotice){
+  const sourceNoticeId=notice.sourceNoticeId?.trim();if(!sourceNoticeId)return null;
+  return db.prepare(`SELECT o.id AS opportunity_id,o.review_status FROM raw_notices rn
+    JOIN opportunity_sources os ON os.raw_notice_id=rn.id JOIN opportunities o ON o.id=os.opportunity_id
+    WHERE rn.source_id=? AND rn.source_notice_id=?
+    ORDER BY CASE o.review_status WHEN 'CONFIRMED' THEN 0 WHEN 'DEFERRED' THEN 1 WHEN 'EXCLUDED' THEN 2 ELSE 3 END,o.updated_at DESC LIMIT 1`)
+    .bind(notice.sourceId,sourceNoticeId).first<ExistingOpportunity>();
+}
 export async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:SourceDefinition,sourceRunId:string,relevance:RelevanceDecision){
   const rawId=await stableId("raw",notice.dedupeKey);
   const opportunityId=await stableId("opp",notice.dedupeKey);
-  const existing=await db.prepare(`SELECT rn.id,rn.relevance_status,o.id AS opportunity_id,o.review_status
-    FROM raw_notices rn LEFT JOIN opportunity_sources os ON os.raw_notice_id=rn.id AND os.is_primary=1
-    LEFT JOIN opportunities o ON o.id=os.opportunity_id WHERE rn.dedupe_key=? LIMIT 1`).bind(notice.dedupeKey).first<{id:string;relevance_status:string;opportunity_id:string|null;review_status:string|null}>();
-  const preserveManual=existing?.review_status===ReviewStatus.EXCLUDED&&existing.relevance_status==="IN_SCOPE";
-  const preserveSupportTypes=existing?.review_status===ReviewStatus.CONFIRMED||existing?.review_status===ReviewStatus.DEFERRED||existing?.review_status===ReviewStatus.EXCLUDED;
+  const existing=await findExistingNotice(db,notice);
+  const identityOpportunity=existing?.opportunity_id?{opportunity_id:existing.opportunity_id,review_status:existing.review_status!}:await findIdentityOpportunity(db,notice);
+  const linkedOpportunityId=identityOpportunity?.opportunity_id??null;const linkedReviewStatus=identityOpportunity?.review_status??null;
+  const preserveManual=linkedReviewStatus===ReviewStatus.EXCLUDED&&existing?.relevance_status==="IN_SCOPE";
+  const preserveSupportTypes=linkedReviewStatus===ReviewStatus.CONFIRMED||linkedReviewStatus===ReviewStatus.DEFERRED||linkedReviewStatus===ReviewStatus.EXCLUDED;
+  const preserveManualState=preserveSupportTypes;
   const supportTypesJson=JSON.stringify(normalizeSupportTypes(relevance.supportTypes));
   if(existing){
     if(preserveManual)await db.prepare("UPDATE raw_notices SET source_run_id=?,title=?,url=?,published_at=?,raw_text=?,collected_at=? WHERE id=?").bind(sourceRunId,notice.title,notice.url,notice.publishedAt,notice.rawText,notice.collectedAt,existing.id).run();
@@ -67,15 +88,17 @@ export async function persistNotice(db:D1DatabaseLike,notice:RawNotice,source:So
   const rawNoticeId=existing?.id??rawId;
   let opportunityCreated=false;
   if(!preserveManual&&shouldCreateOpportunity(relevance.status)){
-    const opportunityInsert=await db.prepare(`INSERT OR IGNORE INTO opportunities
+    let targetOpportunityId=linkedOpportunityId??opportunityId;
+    if(!linkedOpportunityId){const opportunityInsert=await db.prepare(`INSERT OR IGNORE INTO opportunities
       (id,dedupe_key,title,organization,region,field,facility_types_json,support_types_json,application_start,deadline,deadline_verification,deadline_evidence,deadline_evidence_location,eligibility_verification,eligibility_evidence,eligibility_evidence_location,amount_won,amount_text,self_burden,support_details,review_status,published_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .bind(opportunityId,notice.dedupeKey,notice.title,source.name,source.region,inferField(notice.title),JSON.stringify(["기타 / 확인 필요"]),supportTypesJson,null,null,Verification.UNKNOWN,null,null,Verification.UNKNOWN,null,null,null,null,null,null,ReviewStatus.PENDING,notice.publishedAt,notice.collectedAt).run();
-    opportunityCreated=changes(opportunityInsert)>0;
-    if(existing?.opportunity_id&&!preserveSupportTypes)await db.prepare("UPDATE opportunities SET support_types_json=?,updated_at=? WHERE id=?").bind(supportTypesJson,notice.collectedAt,existing.opportunity_id).run();
-    await db.prepare("INSERT OR IGNORE INTO opportunity_sources (opportunity_id,raw_notice_id,is_primary,created_at) VALUES (?,?,1,?)").bind(existing?.opportunity_id??opportunityId,rawNoticeId,notice.collectedAt).run();
-  }else if(!preserveManual&&existing?.opportunity_id&&relevance.status==="OUT_OF_SCOPE"){
-    await db.prepare("UPDATE opportunities SET review_status='EXCLUDED',updated_at=? WHERE id=?").bind(notice.collectedAt,existing.opportunity_id).run();
+      opportunityCreated=changes(opportunityInsert)>0;targetOpportunityId=opportunityId;
+    }
+    if(linkedOpportunityId&&!preserveSupportTypes)await db.prepare("UPDATE opportunities SET support_types_json=?,updated_at=? WHERE id=?").bind(supportTypesJson,notice.collectedAt,linkedOpportunityId).run();
+    await db.prepare("INSERT OR IGNORE INTO opportunity_sources (opportunity_id,raw_notice_id,is_primary,created_at) VALUES (?,?,1,?)").bind(targetOpportunityId,rawNoticeId,notice.collectedAt).run();
+  }else if(!preserveManual&&!preserveManualState&&linkedOpportunityId&&relevance.status==="OUT_OF_SCOPE"){
+    await db.prepare("UPDATE opportunities SET review_status='EXCLUDED',updated_at=? WHERE id=?").bind(notice.collectedAt,linkedOpportunityId).run();
   }
   return{state:existing?"MATCHED" as const:"NEW" as const,rawNoticeId,opportunityId:opportunityCreated?opportunityId:undefined,opportunityCreated,relevanceStatus:preserveManual?"IN_SCOPE" as const:relevance.status};
 }
