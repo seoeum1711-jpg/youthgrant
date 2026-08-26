@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeadlineMode, type GrantViewModel } from "../../lib/domain/types.ts";
 import { categoryTaxonomy, facilityTaxonomy, grantStatusLabel } from "../../lib/domain/grant-view-model.ts";
-import { emptyExplorerFilters, explorerEmptyState, explorerFilterChips, explorerRegions, explorerStatuses, hasPublicExplorerControls, matchesExplorerFilters, parseExplorerQuery, removeExplorerFilterChip, serializeExplorerQuery, sortExplorerGrants, type ExplorerFilterState, type ExplorerSort } from "../../lib/domain/explorer-filter.ts";
+import { emptyExplorerFilters, explorerEmptyState, explorerFilterChips, explorerRegions, explorerStatuses, hasPublicExplorerControls, matchesExplorerFilters, matchesExplorerRegion, parseExplorerQuery, removeExplorerFilterChip, serializeExplorerQuery, sortExplorerGrants, type ExplorerFilterState, type ExplorerSort } from "../../lib/domain/explorer-filter.ts";
 import { supportTypeLabel, supportTypeValues } from "../../lib/domain/support-types.ts";
 import type { ExternalResourceType } from "../../lib/domain/types.ts";
 import { useSavedGrantIds } from "./saved-grants.tsx";
@@ -22,7 +22,7 @@ export function ExplorerClient({grants,activeSourceCount}:{grants:GrantViewModel
   const toggleFilter=useCallback((key:"facility"|"category"|"status"|"support",value:string)=>setFilters(old=>{const values=old[key] as string[];return{...old,[key]:values.includes(value)?values.filter(item=>item!==value):[...values,value]};}),[]);
   const filtered=useMemo(()=>grants.filter(grant=>matchesExplorerFilters(grant,filters)),[grants,filters]);
   const visible=useMemo(()=>sortExplorerGrants(filtered,sort),[filtered,sort]);
-  const count=(kind:"region"|"facility"|"category"|"status"|"support",value:string)=>grants.filter(grant=>kind==="region"?(value==="전체"||grant.eligibleRegion===value||(value!=="전국"&&value!=="확인 필요"&&grant.eligibleRegion==="전국")):kind==="facility"?grant.facilityTypes.includes(value):kind==="category"?grant.field===value:kind==="status"?grant.status===value:grant.supportTypes.includes(value as ExternalResourceType)).length;
+  const count=(kind:"region"|"facility"|"category"|"status"|"support",value:string)=>grants.filter(grant=>kind==="region"?matchesExplorerRegion(grant.eligibleRegion,value):kind==="facility"?grant.facilityTypes.includes(value):kind==="category"?grant.field===value:kind==="status"?grant.status===value:grant.supportTypes.includes(value as ExternalResourceType)).length;
   const closeSheet=useCallback(()=>{setSheet(false);requestAnimationFrame(()=>filterTriggerRef.current?.focus());},[]);
   useEffect(()=>{if(!sheet)return;const previous=document.body.style.overflow;document.body.style.overflow="hidden";filterCloseRef.current?.focus();const keydown=(event:KeyboardEvent)=>{if(event.key==="Escape")closeSheet();};document.addEventListener("keydown",keydown);return()=>{document.body.style.overflow=previous;document.removeEventListener("keydown",keydown);};},[sheet,closeSheet]);
   const reset=()=>setFilters(emptyExplorerFilters);const chips=explorerFilterChips(filters);const zero=explorerEmptyState(activeSourceCount);const hasPublicGrants=hasPublicExplorerControls(grants.length);
