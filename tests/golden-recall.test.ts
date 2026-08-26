@@ -61,8 +61,22 @@ const externalResourceNegative=[
   {id:"N10",title:"청소년시설 직원 채용공고",body:"청소년시설에서 근무할 직원을 채용하며 지원서와 이력서를 접수합니다."},
 ] as const;
 
+const institutionalResourceBundle={
+  id:"KYWA-36701",
+  title:"2026년 우수 청소년활동 프로그램 지원사업 보급활동(실전형) 참여기관 추가 모집",
+  body:"지원내용 ① 프로그램 운영 매뉴얼 무상 제공 ② 프로그램 개발자 1:1 맞춤형 컨설팅(2회) ③ 사업운영비 100,000원(네이버페이 포인트) 지원. 대 상: 청소년수련시설 및 단체 등 청소년관련기관. 제출서류는 보급활동 프로그램 신청서입니다.",
+  types:["MONEY","PROGRAM","PROFESSIONAL_SERVICE"] satisfies ExternalResourceType[],
+};
+
 test("External Resource Golden Positive recall classifies all evidence-backed institution resources",()=>{
   for(const fixture of externalResourcePositive){const result=classifyOpportunityRelevance(fixture);assert.equal(result.status,"IN_SCOPE",fixture.id);for(const type of fixture.types){assert.ok(result.supportTypes.includes(type),`${fixture.id}:${type}`);assert.ok(result.supportEvidence[type]?.length,`${fixture.id}:${type}:evidence`);}}
 });
 
 test("External Resource Golden Negative guard keeps all ten cases OUT_OF_SCOPE",()=>{for(const fixture of externalResourceNegative)assert.equal(classifyOpportunityRelevance(fixture).status,"OUT_OF_SCOPE",fixture.id)});
+
+test("Institutional Resource Bundle Golden recognizes KYWA 36701 without adding MATERIAL",()=>{
+  const result=classifyOpportunityRelevance(institutionalResourceBundle);
+  assert.equal(result.status,"IN_SCOPE");
+  assert.deepEqual(result.supportTypes,institutionalResourceBundle.types);
+  for(const type of institutionalResourceBundle.types)assert.ok(result.supportEvidence[type]?.length,`${institutionalResourceBundle.id}:${type}`);
+});

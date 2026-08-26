@@ -6,6 +6,7 @@ export type RelevanceDecision={status:RelevanceStatusValue;reason:string;signals
 const FINANCIAL=[
   /사업비(?:를|는|로|의)?\s*(?:지원|보조|교부)/,
   /사업\s*수행비(?:를|는|로|의)?\s*(?:지원|지급|교부)/,
+  /(?:사업|프로그램)?\s*운영비[^\n.!?]{0,80}(?:지원|지급|교부)/,
   /예산(?:을|를|은|는)?\s*지원/,
   /(?:지원금|보조금|지원액)(?:을|를|은|는|으로)?\s*(?:지원|지급|교부)?/,
   /(?:기관|시설|단체|개소)\s*(?:당|별)\s*(?:최대\s*)?[0-9,]+\s*(?:만|천만|억)?\s*원/,
@@ -20,11 +21,12 @@ const EXECUTION=[
 ] as const;
 const ORGANIZATION_APPLICANT=[
   /(?:신청|지원|모집)\s*(?:대상|자격|주체)[^\n.]{0,120}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|학교|기관|시설|단체|법인|센터)/,
+  /(?:^|\s)대\s*상\s*[:：]?[^\n.]{0,120}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|학교|기관|시설|단체|법인|센터)/,
   /(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|학교|기관|시설|단체|법인|센터)[^\n.]{0,100}(?:신청|지원할 수|공모에 참여)/,
 ] as const;
 const PERSONAL_APPLICANT=/(?:신청|모집|참가|참여)\s*(?:대상|자격|주체)?[^\n.]{0,80}(?:개인|청소년\s*개인|참가자|교육생|종사자|시민|동아리|학생|지도자)|(?:개인|청소년\s*개인|참가자|교육생|종사자|시민|동아리|학생|지도자)[^\n.]{0,60}(?:신청|모집|참가|참여)/;
 const PARTICIPANT_GROUP_APPLICANT=/(?:신청|모집|지원)\s*(?:대상|자격|주체)?\s*[:：]?\s*[^\n.!?]{0,80}(?:학생회|(?:학생|대학|청소년)\s*동아리|개인(?:들로)?\s*구성(?:된)?\s*팀|참가팀|활동팀)|(?:학생회|(?:학생|대학|청소년)\s*동아리|개인(?:들로)?\s*구성(?:된)?\s*팀|참가팀|활동팀)[^\n.!?]{0,60}(?:신청|모집|지원)/;
-const INSTITUTIONAL_APPLICANT=/(?:신청|모집|지원)\s*(?:대상|자격|주체)?\s*[:：]?\s*[^\n.!?]{0,100}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|복지기관|법인)/;
+const INSTITUTIONAL_APPLICANT=/(?:신청|모집|지원)\s*(?:대상|자격|주체)?\s*[:：]?\s*[^\n.!?]{0,100}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|복지기관|법인)|(?:^|\s)대\s*상\s*[:：]?[^\n.!?]{0,100}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|복지기관|법인)/;
 const PRIZE_CONTEST=/(?:공모전|작품\s*모집|우수\s*사례|사례\s*공모|수기\s*공모)[^\n.]{0,180}(?:시상금|상금|부상)|(?:시상금|상금|부상)[^\n.]{0,180}(?:공모전|작품|사례|수기)/;
 const STRONG_OUT_SIGNALS:[RegExp,string][]=[
   [/(?:참가자|참가\s*청소년|참여자|교육생|수강생)\s*(?:을\s*)?모집/,"개인·참가자 모집"],
@@ -61,9 +63,14 @@ const PROGRAM=[
   /(?:완성된|우수|맞춤형|방문형|보급형|디지털\s*시민성\s*기반|지역형)?\s*(?:교육\s*)?프로그램[^\n.]{0,120}(?:무상\s*)?(?:보급|제공|도입|방문\s*운영|운영\s*지원)/,
   /(?:무상\s*)?(?:보급|제공|도입|방문\s*운영|운영\s*지원)[^\n.]{0,120}(?:완성된|우수|맞춤형|방문형|보급형)?\s*(?:교육\s*)?프로그램/,
 ] as const;
+const PROGRAM_INSTITUTION_USE=[
+  /프로그램\s*운영\s*(?:매뉴얼|자료|콘텐츠)[^\n.!?]{0,60}(?:무상\s*)?(?:제공|보급|지원)/,
+  /(?:우수|보급형|맞춤형)?\s*프로그램[^\n.!?]{0,80}(?:기관|시설|단체)[^\n.!?]{0,60}(?:운영|도입|활용)/,
+] as const;
 const PROFESSIONAL_SERVICE=[
   /(?:전문\s*)?(?:컨설턴트|변호사|노무사|회계사|전문가)[^\n.]{0,120}(?:시설을?\s*)?(?:직접\s*)?(?:방문|파견|배정)[^\n.]{0,120}(?:안전\s*)?(?:컨설팅|법률\s*상담|노무\s*상담|회계\s*상담|시설\s*점검|품질\s*컨설팅)/,
   /(?:안전\s*컨설팅|법률\s*상담|노무\s*상담|회계\s*상담|시설\s*점검|품질\s*컨설팅)[^\n.]{0,120}(?:전문\s*)?(?:컨설턴트|변호사|노무사|회계사|전문가)[^\n.]{0,80}(?:방문|파견|배정|제공)/,
+  /(?:프로그램\s*)?(?:개발자|전문\s*컨설턴트|컨설턴트|전문가)[^\n.!?]{0,50}(?:1\s*[:：]\s*1\s*)?(?:맞춤형\s*)?(?:컨설팅|상담)[^\n.!?]{0,40}(?:[0-9]+\s*회|제공|지원|실시)/,
 ] as const;
 const INSTITUTION_USE=/(?:기관|시설|학교|센터|쉼터)(?:을|를)?\s*(?:직접\s*)?방문|(?:기관|시설|학교|센터|쉼터)[^\n.]{0,80}(?:이용\s*청소년|소속\s*청소년|청소년\s*대상|프로그램(?:을|의)?\s*(?:도입|운영|활용)|현장\s*운영)|(?:선정|신청|지원)\s*(?:기관|시설|학교|센터|쉼터)[^\n.]{0,100}(?:청소년|프로그램|활동|운영|제공)/;
 
@@ -82,11 +89,11 @@ export function classifyOpportunityRelevance(input:RelevanceInput):RelevanceDeci
   if(participantGroup&&!institutionalApplicant&&!execution)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 사업수행 주체가 아니라 학생회·동아리·참가팀 신청으로 확인: ${participantGroup}`,[participantGroup]);
   if(personal&&!applicant)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 활용형 지원이 아니라 개인·동아리 참여 모집으로 확인: ${clean(personal)}`,[clean(personal)]);
   for(const [pattern,label] of STRONG_OUT_SIGNALS){const match=combined.match(pattern);if(match)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 외부자원 지원이 아니라 ${label}으로 확인: ${clean(match[0])}`,[clean(match[0])]);}
-  const supportEvidence=emptyEvidence();const staff=firstMatch(combined,STAFF);const suppliedMaterial=firstMatch(combined,MATERIAL);const materialInstitutionUse=firstMatch(combined,MATERIAL_INSTITUTION_USE);const suppliedProgram=firstMatch(combined,PROGRAM);const professionalService=firstMatch(combined,PROFESSIONAL_SERVICE);const institutionUse=clean(combined.match(INSTITUTION_USE)?.[0]);
-  if(financial&&execution)addEvidence(supportEvidence,ExternalResourceType.MONEY,financial,execution);
+  const supportEvidence=emptyEvidence();const staff=firstMatch(combined,STAFF);const suppliedMaterial=firstMatch(combined,MATERIAL);const materialInstitutionUse=firstMatch(combined,MATERIAL_INSTITUTION_USE);const suppliedProgram=firstMatch(combined,PROGRAM);const programInstitutionUse=firstMatch(combined,PROGRAM_INSTITUTION_USE);const professionalService=firstMatch(combined,PROFESSIONAL_SERVICE);const institutionUse=clean(combined.match(INSTITUTION_USE)?.[0]);const programManualProvision=combined.match(/프로그램\s*운영\s*매뉴얼[^\n.!?]{0,60}(?:제공|보급|지원)/)?.[0]??null;
+  if(financial&&(execution||institutionUse||programInstitutionUse||/운영비/.test(financial)))addEvidence(supportEvidence,ExternalResourceType.MONEY,financial,execution||institutionUse||programInstitutionUse);
   if(staff&&institutionUse)addEvidence(supportEvidence,ExternalResourceType.STAFF,staff,institutionUse);
-  if(suppliedMaterial&&materialInstitutionUse)addEvidence(supportEvidence,ExternalResourceType.MATERIAL,suppliedMaterial,materialInstitutionUse);
-  if(suppliedProgram&&institutionUse)addEvidence(supportEvidence,ExternalResourceType.PROGRAM,suppliedProgram,institutionUse);
+  if(suppliedMaterial&&materialInstitutionUse&&!(programManualProvision&&/매뉴얼/.test(suppliedMaterial)))addEvidence(supportEvidence,ExternalResourceType.MATERIAL,suppliedMaterial,materialInstitutionUse);
+  if(suppliedProgram&&(institutionUse||programInstitutionUse))addEvidence(supportEvidence,ExternalResourceType.PROGRAM,suppliedProgram,institutionUse||programInstitutionUse);
   if(professionalService)addEvidence(supportEvidence,ExternalResourceType.PROFESSIONAL_SERVICE,professionalService);
   const supportTypes=Object.keys(supportEvidence) as ExternalResourceTypeValue[];
   if(applicant&&supportTypes.length){const signals=[applicant,...supportTypes.flatMap(type=>supportEvidence[type]??[])];return decision(RelevanceStatus.IN_SCOPE,`기관 신청·활용형 외부자원 제공 확인 (${supportTypes.join(", ")}): ${signals.join(" / ")}`,signals,supportEvidence);}

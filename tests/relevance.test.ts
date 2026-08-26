@@ -33,6 +33,28 @@ test("V2 Phase 1.1 guards participant groups and requires institution-used MATER
   assert.equal(participantEquipment.status,"OUT_OF_SCOPE");assert.deepEqual(participantEquipment.supportTypes,[]);
 });
 
+test("institutional resource bundles outrank contextual participation exclusions",()=>{
+  const kywa=classify("2026년 우수 청소년활동 프로그램 지원사업 보급활동(실전형) 참여기관 추가 모집","지원내용 ① 프로그램 운영 매뉴얼 무상 제공 ② 프로그램 개발자 1:1 맞춤형 컨설팅(2회) ③ 사업운영비 100,000원(네이버페이 포인트) 지원. 대 상: 청소년수련시설 및 단체 등 청소년관련기관. 제출서류는 보급활동 프로그램 신청서입니다.");
+  assert.equal(kywa.status,"IN_SCOPE");
+  assert.deepEqual(kywa.supportTypes,["MONEY","PROGRAM","PROFESSIONAL_SERVICE"]);
+  for(const type of kywa.supportTypes)assert.ok(kywa.supportEvidence[type]?.length,type);
+
+  const event=classify("청소년 행사 참여기관 모집","대 상: 청소년시설 및 관련 기관. 참여기관은 지역 축제 행사에 참가하고 일정 안내를 받습니다.");
+  assert.equal(event.status,"OUT_OF_SCOPE");assert.deepEqual(event.supportTypes,[]);
+
+  const consulting=classify("청소년 프로그램 컨설팅 참여기관 모집","신청대상은 청소년시설입니다. 선정 기관에는 전문 컨설턴트가 1:1 맞춤형 컨설팅을 2회 제공합니다.");
+  assert.equal(consulting.status,"IN_SCOPE");assert.deepEqual(consulting.supportTypes,["PROFESSIONAL_SERVICE"]);
+
+  const program=classify("우수 프로그램 보급 참여기관 모집","신청대상은 청소년수련시설입니다. 선정 기관이 현장에서 운영할 수 있도록 우수 프로그램 운영 매뉴얼을 무상 제공합니다.");
+  assert.equal(program.status,"IN_SCOPE");assert.deepEqual(program.supportTypes,["PROGRAM"]);
+
+  const money=classify("청소년 프로그램 운영기관 지원","신청대상은 청소년 관련 기관입니다. 선정 기관의 프로그램 운영을 위해 사업운영비 100,000원을 지원합니다.");
+  assert.equal(money.status,"IN_SCOPE");assert.deepEqual(money.supportTypes,["MONEY"]);
+
+  const personal=classify("청소년지도자 컨설팅 참가자 모집","모집대상은 청소년지도자 개인입니다. 참가자는 전문가에게 1:1 컨설팅을 2회 제공받습니다.");
+  assert.equal(personal.status,"OUT_OF_SCOPE");assert.deepEqual(personal.supportTypes,[]);
+});
+
 test("known participant, education, event and cooperation noise is OUT_OF_SCOPE",()=>{
   const cases=[
     ["청소년 디지털 성평등 교육 참가기관 추가 모집","교육 참여를 희망하는 학교와 청소년기관을 모집합니다. 참가 기관은 무료 강의 영상을 시청합니다."],
