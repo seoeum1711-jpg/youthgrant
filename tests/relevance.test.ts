@@ -19,6 +19,31 @@ test("financial support plus institution delivery is IN_SCOPE",()=>{
   for(const [title,body] of cases)assert.equal(classify(title,body).status,"IN_SCOPE",title);
 });
 
+test("personal welfare pages never become institutional MONEY from nearby institution words",()=>{
+  const childcare=classify("출산·양육 지원사업","지원대상: 영유아\n기관 보육료 안내\n영유아 주민등록 주소지 주민센터 방문 신청\n가구 소득에 따라 지원금이 지급됩니다.");
+  assert.equal(childcare.status,"OUT_OF_SCOPE");assert.deepEqual(childcare.supportTypes,[]);
+
+  const careService=classify("아이돌봄지원사업 안내","아이돌봄서비스 이용가정을 안내합니다.\n지원 대상은 부모와 아동입니다.\n서비스제공 기관에 문의하고 행정복지센터를 방문하여 신청합니다.\n소득수준에 따라 정부지원금이 적용됩니다.");
+  assert.equal(careService.status,"OUT_OF_SCOPE");assert.deepEqual(careService.supportTypes,[]);
+
+  const householdMoney=classify("가정생활 지원 안내","지원대상은 저소득 가구입니다. 가구에 월 10만원 지원금을 지급합니다.");
+  assert.equal(householdMoney.status,"OUT_OF_SCOPE");assert.deepEqual(householdMoney.supportTypes,[]);
+});
+
+test("institution applicant and resource direction stay explicit",()=>{
+  const personalVisit=classify("복지서비스 신청 안내","지원대상은 주민입니다. 주민이 행정복지센터를 방문해 신청하면 지원금을 지급합니다.");
+  assert.equal(personalVisit.status,"OUT_OF_SCOPE");assert.deepEqual(personalVisit.supportTypes,[]);
+
+  const parentTarget=classify("가족 프로그램 안내","지원대상: 부모 및 영유아\n제공기관 안내와 서비스 신청 방법을 확인하세요.");
+  assert.notEqual(parentTarget.status,"IN_SCOPE");
+
+  const facilityTarget=classify("청소년시설 지원사업","지원대상: 청소년수련시설 및 비영리 청소년단체\n선정기관에 사업운영비 10만원을 지원합니다.");
+  assert.equal(facilityTarget.status,"IN_SCOPE");assert.deepEqual(facilityTarget.supportTypes,["MONEY"]);
+
+  const deliveredStaff=classify("찾아가는 청소년 프로그램 지원","신청대상은 청소년수련시설입니다. 선정된 시설에 전문 강사를 파견하여 청소년 프로그램을 제공합니다.");
+  assert.equal(deliveredStaff.status,"IN_SCOPE");assert.ok(deliveredStaff.supportTypes.includes("STAFF"));
+});
+
 test("V2 Phase 1.1 guards participant groups and requires institution-used MATERIAL evidence",()=>{
   const patrol=classify("2026년 제5기 서울 대학생 순찰대 추가 모집 연장 공고","모집대상은 서울 소재 대학교 내 구성된 학생회, 동아리 등 단체입니다. 선정된 순찰대는 캠퍼스 순찰에 참여하며 순찰장비를 지급받습니다.");
   assert.equal(patrol.status,"OUT_OF_SCOPE");assert.deepEqual(patrol.supportTypes,[]);

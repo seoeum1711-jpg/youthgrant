@@ -22,7 +22,15 @@ const EXECUTION=[
 const ORGANIZATION_APPLICANT=[
   /(?:신청|지원|모집)\s*(?:대상|자격|주체)[^\n.]{0,120}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|학교|기관|시설|단체|법인|센터)/,
   /(?:^|\s)대\s*상\s*[:：]?[^\n.]{0,120}(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|학교|기관|시설|단체|법인|센터)/,
-  /(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|학교|기관|시설|단체|법인|센터)[^\n.]{0,100}(?:신청|지원할 수|공모에 참여)/,
+  /(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|복지기관|법인)[^\n.]{0,100}(?:신청|지원할 수|공모에 참여)/,
+  /(?:신청\s*기관|기관별\s*신청|시설에서\s*신청|(?:기관|시설|학교|센터|단체|법인)(?:이|은|는|에서|별)\s*[^\n.!?]{0,50}(?:신청|지원할 수|공모에 참여)|(?:기관|시설|학교|센터|단체|법인)을\s*선정(?:하여|해)?\s*지원)/,
+] as const;
+const PERSONAL_BENEFICIARY=/(?:개인|주민|아동|청소년\s*개인|영유아|부모|보호자|가정|가구)/;
+const WELFARE_BENEFIT=/(?:복지\s*급여|돌봄\s*서비스|아이돌봄\s*서비스|수당|보육료|이용료|정부\s*지원금)/;
+const PERSONAL_WELFARE_CONTEXT=[
+  /(?:지원|신청)\s*대상\s*[:：]?[^\n.!?]{0,100}(?:개인|주민|아동|청소년\s*개인|영유아|부모|보호자|가정|가구)[^\n.!?]{0,120}(?:복지\s*급여|서비스|수당|보육료|이용료|지원금)/,
+  /(?:개인|주민|아동|청소년\s*개인|영유아|부모|보호자|가정|가구)[^\n.!?]{0,100}(?:복지\s*급여|서비스|수당|보육료|이용료|지원금)/,
+  /(?:복지\s*급여|서비스|수당|보육료|이용료|지원금)[^\n.!?]{0,100}(?:개인|주민|아동|청소년\s*개인|영유아|부모|보호자|가정|가구)/,
 ] as const;
 const PERSONAL_APPLICANT=/(?:신청|모집|참가|참여)\s*(?:대상|자격|주체)?[^\n.]{0,80}(?:개인|청소년\s*개인|참가자|교육생|종사자|시민|동아리|학생|지도자)|(?:개인|청소년\s*개인|참가자|교육생|종사자|시민|동아리|학생|지도자)[^\n.]{0,60}(?:신청|모집|참가|참여)/;
 const PARTICIPANT_GROUP_APPLICANT=/(?:신청|모집|지원)\s*(?:대상|자격|주체)?\s*[:：]?\s*[^\n.!?]{0,80}(?:학생회|(?:학생|대학|청소년)\s*동아리|개인(?:들로)?\s*구성(?:된)?\s*팀|참가팀|활동팀)|(?:학생회|(?:학생|대학|청소년)\s*동아리|개인(?:들로)?\s*구성(?:된)?\s*팀|참가팀|활동팀)[^\n.!?]{0,60}(?:신청|모집|지원)/;
@@ -72,25 +80,29 @@ const PROFESSIONAL_SERVICE=[
   /(?:안전\s*컨설팅|법률\s*상담|노무\s*상담|회계\s*상담|시설\s*점검|품질\s*컨설팅)[^\n.]{0,120}(?:전문\s*)?(?:컨설턴트|변호사|노무사|회계사|전문가)[^\n.]{0,80}(?:방문|파견|배정|제공)/,
   /(?:프로그램\s*)?(?:개발자|전문\s*컨설턴트|컨설턴트|전문가)[^\n.!?]{0,50}(?:1\s*[:：]\s*1\s*)?(?:맞춤형\s*)?(?:컨설팅|상담)[^\n.!?]{0,40}(?:[0-9]+\s*회|제공|지원|실시)/,
 ] as const;
-const INSTITUTION_USE=/(?:기관|시설|학교|센터|쉼터)(?:을|를)?\s*(?:직접\s*)?방문|(?:기관|시설|학교|센터|쉼터)[^\n.]{0,80}(?:이용\s*청소년|소속\s*청소년|청소년\s*대상|프로그램(?:을|의)?\s*(?:도입|운영|활용)|현장\s*운영)|(?:선정|신청|지원)\s*(?:기관|시설|학교|센터|쉼터)[^\n.]{0,100}(?:청소년|프로그램|활동|운영|제공)/;
+const INSTITUTION_USE=/(?:기관|시설|학교|센터|쉼터)[^\n.]{0,80}(?:이용\s*청소년|소속\s*청소년|청소년\s*대상|프로그램(?:을|의)?\s*(?:도입|운영|활용)|현장\s*운영)|(?:선정(?:된)?|신청|지원)\s*(?:기관|시설|학교|센터|쉼터)[^\n.]{0,100}(?:청소년|프로그램|활동|운영|제공)|(?:선정(?:된)?\s*)?(?:기관|시설|학교|센터|쉼터)(?:에|에게)[^\n.!?]{0,100}(?:강사|멘토|상담사|전문가|전문\s*인력|운영인력|프로그램|교구|장비|키트|물품)[^\n.!?]{0,60}(?:방문|파견|배치|제공|보급|지원)|(?:강사|멘토|상담사|컨설턴트|변호사|노무사|회계사|전문가|전문\s*인력|운영인력)[^\n.!?]{0,100}(?:기관|시설|학교|센터|쉼터)(?:을|를|에|에게)[^\n.!?]{0,40}(?:방문|파견|배치)/;
+const DIRECT_INSTITUTION_RESOURCE=/(?:선정(?:된)?|신청|지원)\s*(?:기관|시설|학교|센터|쉼터|단체)(?:에|에게|은|는)?[^\n.!?]{0,100}(?:사업비|운영비|지원금|보조금|강사|인력|교구|장비|키트|물품|프로그램|전문\s*서비스)[^\n.!?]{0,60}(?:지원|지급|교부|제공|파견|보급)/;
 
 function clean(value:string|null|undefined){return(value??"").replace(/\s+/g," ").trim();}
+function structured(value:string|null|undefined){return(value??"").replace(/\r\n?/g,"\n").replace(/[ \t]+/g," ").replace(/\n\s*\n+/g,"\n").trim();}
 function firstMatch(text:string,patterns:readonly RegExp[]){for(const pattern of patterns){const match=text.match(pattern);if(match)return clean(match[0]).slice(0,140);}return null;}
+function institutionalApplicant(text:string){for(const pattern of ORGANIZATION_APPLICANT){const match=text.match(pattern);if(!match)continue;const evidence=clean(match[0]);if(/지원\s*대상(?:이|은|는)?\s*(?:아니|제외)/.test(evidence))continue;if(/(?:주민|행정복지)?센터(?:를)?\s*방문(?:하여|해)?\s*(?:접수|신청)/.test(evidence))continue;if(PERSONAL_BENEFICIARY.test(evidence)&&!/(?:청소년수련관|청소년문화의집|청소년수련원|청소년특화시설|청소년(?:수련)?시설|청소년(?:\s*관련)?기관|청소년쉼터|비영리(?:기관|법인|단체)|복지기관|법인|단체)/.test(evidence))continue;return evidence.slice(0,140);}return null;}
 function bodyIsMaterial(title:string,body:string){const withoutTitle=clean(body.replace(title,""));return withoutTitle.length>=20;}
 function emptyEvidence():Partial<Record<ExternalResourceTypeValue,string[]>>{return{};}
 function decision(status:RelevanceStatusValue,reason:string,signals:string[],supportEvidence:Partial<Record<ExternalResourceTypeValue,string[]>>=emptyEvidence()):RelevanceDecision{return{status,reason:reason.slice(0,500),signals,supportTypes:Object.keys(supportEvidence) as ExternalResourceTypeValue[],supportEvidence};}
 function addEvidence(target:Partial<Record<ExternalResourceTypeValue,string[]>>,type:ExternalResourceTypeValue,...values:(string|null)[]){const evidence=values.filter((value):value is string=>Boolean(value));if(evidence.length)target[type]=[...new Set(evidence)];}
 
 export function classifyOpportunityRelevance(input:RelevanceInput):RelevanceDecision{
-  const title=clean(input.title);const body=clean(input.body);const attachments=clean(input.attachmentText?.join(" "));const evidence=clean(`${body} ${attachments}`);const material=bodyIsMaterial(title,body)||attachments.length>=30;const combined=clean(`${title} ${evidence}`);
-  const financial=firstMatch(combined,FINANCIAL);const execution=firstMatch(combined,EXECUTION);const applicant=firstMatch(combined,ORGANIZATION_APPLICANT);const personal=combined.match(PERSONAL_APPLICANT)?.[0]??null;const participantGroup=clean(combined.match(PARTICIPANT_GROUP_APPLICANT)?.[0]);const institutionalApplicant=clean(combined.match(INSTITUTIONAL_APPLICANT)?.[0]);
+  const title=clean(input.title);const body=structured(input.body);const attachments=structured(input.attachmentText?.join("\n"));const evidence=structured(`${body}\n${attachments}`);const material=bodyIsMaterial(title,body)||attachments.length>=30;const structuredCombined=structured(`${title}\n${evidence}`);const combined=clean(structuredCombined);
+  const financial=firstMatch(combined,FINANCIAL);const execution=firstMatch(combined,EXECUTION);const applicant=institutionalApplicant(structuredCombined);const personal=combined.match(PERSONAL_APPLICANT)?.[0]??null;const participantGroup=clean(combined.match(PARTICIPANT_GROUP_APPLICANT)?.[0]);const institutionalApplicantSignal=clean(structuredCombined.match(INSTITUTIONAL_APPLICANT)?.[0]);const personalWelfare=firstMatch(structuredCombined,PERSONAL_WELFARE_CONTEXT)??(PERSONAL_BENEFICIARY.test(structuredCombined)&&WELFARE_BENEFIT.test(structuredCombined)?"개인·가정 수혜자 대상 복지급여·서비스":null);const directInstitutionResource=clean(structuredCombined.match(DIRECT_INSTITUTION_RESOURCE)?.[0]);
   if(!material)return decision(RelevanceStatus.RELEVANCE_REVIEW,"상세 본문 또는 첨부 근거가 충분하지 않아 공모사업 해당 여부를 자동 확정할 수 없음",[]);
   if(PRIZE_CONTEST.test(combined))return decision(RelevanceStatus.OUT_OF_SCOPE,"외부자원 지원사업이 아니라 시상금·상금 중심 공모전으로 확인",["시상금·상금 중심 공모전"]);
-  if(participantGroup&&!institutionalApplicant&&!execution)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 사업수행 주체가 아니라 학생회·동아리·참가팀 신청으로 확인: ${participantGroup}`,[participantGroup]);
+  if(participantGroup&&!institutionalApplicantSignal&&!execution)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 사업수행 주체가 아니라 학생회·동아리·참가팀 신청으로 확인: ${participantGroup}`,[participantGroup]);
   if(personal&&!applicant)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 활용형 지원이 아니라 개인·동아리 참여 모집으로 확인: ${clean(personal)}`,[clean(personal)]);
   for(const [pattern,label] of STRONG_OUT_SIGNALS){const match=combined.match(pattern);if(match)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 외부자원 지원이 아니라 ${label}으로 확인: ${clean(match[0])}`,[clean(match[0])]);}
-  const supportEvidence=emptyEvidence();const staff=firstMatch(combined,STAFF);const suppliedMaterial=firstMatch(combined,MATERIAL);const materialInstitutionUse=firstMatch(combined,MATERIAL_INSTITUTION_USE);const suppliedProgram=firstMatch(combined,PROGRAM);const programInstitutionUse=firstMatch(combined,PROGRAM_INSTITUTION_USE);const professionalService=firstMatch(combined,PROFESSIONAL_SERVICE);const institutionUse=clean(combined.match(INSTITUTION_USE)?.[0]);
-  if(financial&&(execution||institutionUse||programInstitutionUse||/운영비/.test(financial)))addEvidence(supportEvidence,ExternalResourceType.MONEY,financial,execution||institutionUse||programInstitutionUse);
+  if(personalWelfare&&!execution&&!directInstitutionResource)return decision(RelevanceStatus.OUT_OF_SCOPE,`기관 신청형 공모가 아니라 개인·가정 대상 복지급여·서비스 안내로 확인: ${personalWelfare}`,[personalWelfare]);
+  const supportEvidence=emptyEvidence();const staff=firstMatch(combined,STAFF);const suppliedMaterial=firstMatch(combined,MATERIAL);const materialInstitutionUse=firstMatch(combined,MATERIAL_INSTITUTION_USE);const suppliedProgram=firstMatch(combined,PROGRAM);const programInstitutionUse=firstMatch(combined,PROGRAM_INSTITUTION_USE);const professionalService=firstMatch(combined,PROFESSIONAL_SERVICE);const institutionUse=clean(structuredCombined.match(INSTITUTION_USE)?.[0]);
+  if(financial&&applicant&&(execution||institutionUse||programInstitutionUse||/운영비/.test(financial)))addEvidence(supportEvidence,ExternalResourceType.MONEY,financial,execution||institutionUse||programInstitutionUse);
   if(staff&&institutionUse)addEvidence(supportEvidence,ExternalResourceType.STAFF,staff,institutionUse);
   if(suppliedMaterial&&materialInstitutionUse)addEvidence(supportEvidence,ExternalResourceType.MATERIAL,suppliedMaterial,materialInstitutionUse);
   if(suppliedProgram&&(institutionUse||programInstitutionUse))addEvidence(supportEvidence,ExternalResourceType.PROGRAM,suppliedProgram,institutionUse||programInstitutionUse);
