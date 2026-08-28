@@ -19,7 +19,7 @@ export function PublicFooter(){
           <p>청소년수련시설을 위한 공모·지원사업 탐색 서비스</p>
         </section>
         <div className="footer-utility">
-          <p className="footer-operator">운영·제작 청록</p>
+          <p className="footer-operator">운영·제작 유그린</p>
           <span className="footer-divider" aria-hidden="true">|</span>
           <button ref={triggerRef} className="footer-contact" type="button" onClick={()=>setOpen(true)}>문의 및 오류제보</button>
         </div>
